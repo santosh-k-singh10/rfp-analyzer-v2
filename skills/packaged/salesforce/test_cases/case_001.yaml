@@ -1,0 +1,19 @@
+version: "1.0"
+skill: packaged-salesforce
+description: "Validates extraction of Salesforce product scope and AppExchange constraint"
+input_excerpt: |
+  The implementation scope includes Salesforce Sales Cloud Enterprise Edition and
+  Service Cloud Professional Edition. All AppExchange solutions must be formally
+  evaluated before any custom Apex development is approved by the architecture board.
+  Custom Lightning Web Components are permitted only where declarative Flow-based
+  automation cannot meet the requirement.
+expected_fields:
+  - path: "items[0].item_type"
+    check: equals
+    value: "product_scope"
+  - path: "items[0].sf_products"
+    check: contains
+    value: "Sales Cloud"
+  - path: "items[1].item_type"
+    check: equals
+    value: "appexchange_constraint"

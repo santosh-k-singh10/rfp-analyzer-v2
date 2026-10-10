@@ -1,0 +1,15 @@
+version: "1.0"
+skill: rate-card
+description: "Validates that the rate-card skill correctly sets no_roles_stated=true when the RFP contains no explicit role list"
+input_excerpt: |
+  The scope of this engagement covers implementation, testing, and go-live support for the
+  client's new ERP system. The vendor shall provide all necessary personnel to complete the
+  project. Please provide your proposed team structure and daily rates as part of your
+  commercial proposal in Annexure C. No ceiling rates are specified by the client.
+expected_fields:
+  - path: "no_roles_stated"
+    check: equals
+    value: true
+  - path: "items"
+    check: equals
+    value: []

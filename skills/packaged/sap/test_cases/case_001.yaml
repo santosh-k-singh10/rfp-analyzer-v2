@@ -1,0 +1,22 @@
+version: "1.0"
+skill: packaged-sap
+description: "Validates extraction of SAP module scope and config vs. customization boundary"
+input_excerpt: |
+  The implementation scope includes SAP S/4HANA Finance (FI), Controlling (CO), and
+  Materials Management (MM) modules. Custom ABAP development shall be strictly limited
+  to gaps where standard SAP configuration cannot fulfil the requirement. The vendor
+  shall deploy the solution on SAP RISE with Business Cloud Edition (BCE) licensing
+  with an initial user count of 350 named users.
+expected_fields:
+  - path: "items[0].item_type"
+    check: equals
+    value: "module_scope"
+  - path: "items[0].sap_modules"
+    check: contains
+    value: "FI"
+  - path: "items[1].item_type"
+    check: equals
+    value: "config_vs_customize"
+  - path: "items[1].config_type"
+    check: equals
+    value: "customization"

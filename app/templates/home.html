@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}Upload RFP — RFP Analyzer V2{% endblock %}
+
+{% block rail %}
+<div class="rail-section">
+  <div class="rail-section__label">Navigation</div>
+  <a href="/" class="rail-item rail-item--active">
+    <span class="rail-item__dot" style="background:var(--accent)"></span>
+    New Analysis
+  </a>
+</div>
+<div class="rail-section">
+  <div class="rail-section__label">Recent Jobs</div>
+  <div id="recent-jobs-rail"></div>
+</div>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">Analyse an RFP</h1>
+<p class="page-meta">Upload one or more documents to begin analysis. Mark which file is the primary RFP; tag supporting documents as annexures or Q&amp;A sheets.</p>
+
+<!-- Upload zone -->
+<div class="upload-zone" id="upload-zone">
+  <div class="upload-zone__icon">📄</div>
+  <p class="upload-zone__title">Drop your documents here</p>
+  <p class="upload-zone__hint">or click to browse — PDF, DOCX, TXT, XLSX, XLS supported · multiple files allowed</p>
+  <label class="btn btn--primary" for="file-input">Choose files</label>
+  <input type="file" id="file-input" accept=".pdf,.docx,.doc,.txt,.xlsx,.xls" multiple style="display:none">
+</div>
+
+<!-- File list with primary radio + role selectors -->
+<div id="file-list-section" style="display:none; max-width:640px; margin:20px auto 0;">
+  <div class="panel">
+    <p class="panel__title">Documents to analyse</p>
+    <p style="font-size:0.8rem;color:var(--ink-muted);margin-bottom:12px;">
+      Select which document is the primary RFP and tag any supporting files.
+    </p>
+    <ul id="file-list" style="list-style:none;padding:0;margin:0;"></ul>
+    <div style="margin-top:16px;display:flex;gap:10px;align-items:center;">
+      <button class="btn btn--primary" id="start-btn" onclick="startAnalysis()">Start Analysis</button>
+      <button class="btn btn--secondary" onclick="resetForm()">Clear</button>
+    </div>
+  </div>
+</div>
+
+<!-- Progress / status -->
+<div id="status-area" style="max-width:560px; margin:24px auto; display:none;">
+  <div class="panel">
+    <p class="panel__title">Analysis Status</p>
+    <div id="status-detail" style="font-size:0.875rem;"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const zone      = document.getElementById('upload-zone');
+  const input     = document.getElementById('file-input');
+  const area      = document.getElementById('status-area');
+  const detail    = document.getElementById('status-detail');
+  const fileListSection = document.getElementById('file-list-section');
+  const fileListEl      = document.getElementById('file-list');
+
+  let _selectedFiles = [];   // File objects
+
+  // ── File helpers ────────────────────────────────────────────────────────
+
+  const ROLE_OPTIONS = ['primary', 'annexure', 'qna'];
+  const ROLE_LABELS  = { primary: 'Primary RFP', annexure: 'Annexure', qna: 'Q&A Sheet' };
+
+  function buildFileList(files) {
+    _selectedFiles = Array.from(files);
+    fileListEl.innerHTML = '';
+    _selectedFiles.forEach((file, idx) => {
+      const li = document.createElement('li');
+      li.className = 'file-list-row';
+      li.dataset.idx = idx;
+
+      // Role selector
+      const roleSelect = document.createElement('select');
+      roleSelect.className = 'file-list-row__role';
+      roleSelect.dataset.idx = idx;
+      ROLE_OPTIONS.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r;
+        opt.textContent = ROLE_LABELS[r];
+        if (r === 'primary' && idx === 0) opt.selected = true;
+        // Auto-guess: if filename contains "qna" or "q&a" or "clarif", default to qna
+        if (r === 'qna' && /qn[a_]|q&a|clarif/i.test(file.name)) opt.selected = true;
+        // Auto-guess: annexure
+        if (r === 'annexure' && idx > 0 && !/qn[a_]|q&a|clarif/i.test(file.name)) opt.selected = true;
+        roleSelect.appendChild(opt);
+      });
+      // When user selects "primary", deselect primary from others
+      roleSelect.addEventListener('change', () => {
+        if (roleSelect.value === 'primary') {
+          document.querySelectorAll('.file-list-row__role').forEach(sel => {
+            if (sel !== roleSelect && sel.value === 'primary') {
+              sel.value = 'annexure';
+            }
+          });
+        }
+      });
+
+      // Remove button
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'file-list-row__remove';
+      removeBtn.textContent = '✕';
+      removeBtn.title = 'Remove';
+      removeBtn.onclick = () => {
+        _selectedFiles.splice(idx, 1);
+        buildFileList(_selectedFiles);
+        if (_selectedFiles.length === 0) {
+          fileListSection.style.display = 'none';
+          zone.style.display = '';
+        }
+      };
+
+      li.innerHTML = `
+        <span class="file-list-row__icon">📄</span>
+        <span class="file-list-row__name">${esc(file.name)}</span>
+        <span class="file-list-row__size">${formatBytes(file.size)}</span>
+      `;
+      li.appendChild(roleSelect);
+      li.appendChild(removeBtn);
+      fileListEl.appendChild(li);
+    });
+
+    zone.style.display = 'none';
+    fileListSection.style.display = '';
+  }
+
+  function resetForm() {
+    _selectedFiles = [];
+    fileListEl.innerHTML = '';
+    fileListSection.style.display = 'none';
+    zone.style.display = '';
+    area.style.display = 'none';
+    input.value = '';
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // ── Status helpers ──────────────────────────────────────────────────────
+
+  function showStatus(msg, jobId, status) {
+    area.style.display = '';
+    const dotClass = `status-badge--${status || 'running'}`;
+    detail.innerHTML = `
+      <div class="status-badge ${dotClass}" style="margin-bottom:8px;">${msg}</div>
+      ${jobId ? `<a href="/review/${jobId}" class="btn btn--secondary" style="margin-top:8px;">View results →</a>` : ''}
+    `;
+  }
+
+  // ── Start analysis ──────────────────────────────────────────────────────
+
+  window.startAnalysis = async function () {
+    if (!_selectedFiles.length) return;
+
+    // Collect roles
+    const roleSelects = document.querySelectorAll('.file-list-row__role');
+    const rolesObj = {};
+    let primaryName = _selectedFiles[0].name;
+    roleSelects.forEach((sel, idx) => {
+      const fname = _selectedFiles[idx].name;
+      rolesObj[fname] = sel.value;
+      if (sel.value === 'primary') primaryName = fname;
+    });
+
+    showStatus('Uploading…', null, 'running');
+    fileListSection.style.display = 'none';
+
+    try {
+      const formData = new FormData();
+      _selectedFiles.forEach(f => formData.append('files', f));
+      formData.append('primary_filename', primaryName);
+      formData.append('roles', JSON.stringify(rolesObj));
+
+      const resp = await fetch('/analyze', { method: 'POST', body: formData });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ detail: resp.statusText }));
+        throw new Error(err.detail || resp.statusText);
+      }
+      const data = await resp.json();
+      const jobId = data.job_id;
+
+      showStatus(`Analysing ${data.file_count} document${data.file_count !== 1 ? 's' : ''}…`, null, 'running');
+      V2.pollJob(
+        jobId,
+        (d) => showStatus(`Status: ${d.status}`, null, 'running'),
+        (d) => { showStatus('Analysis complete!', jobId, 'complete'); loadRecentJobs(); },
+        (err) => showStatus(`Failed: ${err}`, null, 'failed'),
+      );
+    } catch (e) {
+      showStatus(`Upload failed: ${e.message}`, null, 'failed');
+      fileListSection.style.display = '';
+    }
+  };
+
+  // ── Wire file inputs ────────────────────────────────────────────────────
+
+  input.addEventListener('change', () => {
+    if (input.files.length) buildFileList(input.files);
+  });
+
+  zone.addEventListener('dragover',  (e) => { e.preventDefault(); zone.classList.add('upload-zone--drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('upload-zone--drag-over'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('upload-zone--drag-over');
+    if (e.dataTransfer.files.length) buildFileList(e.dataTransfer.files);
+  });
+
+  // Also allow dropping onto the already-visible file-list panel to add more files
+  fileListSection.addEventListener('dragover',  (e) => { e.preventDefault(); });
+  fileListSection.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files.length) {
+      const merged = [..._selectedFiles, ...Array.from(e.dataTransfer.files)];
+      buildFileList(merged);
+    }
+  });
+
+  // ── Recent jobs rail ────────────────────────────────────────────────────
+
+  async function loadRecentJobs() {
+    try {
+      const data = await V2.apiGet('/jobs');
+      const rail = document.getElementById('recent-jobs-rail');
+      rail.innerHTML = '';
+      (data.jobs || []).slice(0, 8).forEach(j => {
+        const a = document.createElement('a');
+        a.className = `rail-item${j.status !== 'complete' ? ' rail-item--inactive' : ''}`;
+        a.href = j.status === 'complete' ? `/review/${j.job_id}` : '#';
+        const countLabel = j.file_count > 1 ? ` (${j.file_count} docs)` : '';
+        a.innerHTML = `
+          <span class="rail-item__dot" style="background:${j.status==='complete'?'var(--accent)':j.status==='failed'?'#C0392B':'#DAD7CE'}"></span>
+          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px;">${j.file_name || j.job_id}</span>
+          <span style="font-size:0.7rem;color:var(--ink-muted)">${countLabel}</span>
+        `;
+        rail.appendChild(a);
+      });
+    } catch (_) {}
+  }
+  loadRecentJobs();
+})();
+</script>
+{% endblock %}

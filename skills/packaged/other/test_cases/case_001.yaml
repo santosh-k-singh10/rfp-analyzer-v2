@@ -1,0 +1,22 @@
+version: "1.0"
+skill: packaged-other
+description: "Validates extraction of ServiceNow ITSM scope and configuration preference constraint"
+input_excerpt: |
+  The vendor shall implement ServiceNow ITSM including the Incident Management, Problem
+  Management, and Change Management modules. Configuration shall be preferred over custom
+  scripting; any custom server-side scripts require explicit approval from the architecture
+  board. License model is concurrent user-based with 150 initial full-stack licences and
+  an assumed 20% annual growth in user count.
+expected_fields:
+  - path: "items[0].item_type"
+    check: equals
+    value: "product_fit"
+  - path: "items[0].product_name"
+    check: contains
+    value: "ServiceNow"
+  - path: "items[1].item_type"
+    check: equals
+    value: "config_vs_customize"
+  - path: "items[2].item_type"
+    check: equals
+    value: "license_model"

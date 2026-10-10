@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}RFP Analyzer V2{% endblock %}</title>
+  <!-- Google Fonts: Fraunces (serif headers) + Inter (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/app.css?v={{ static_ver }}">
+  {% block head_extra %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- Header -->
+  <header class="app-header">
+    <a href="/" style="text-decoration:none; display:flex; align-items:center; gap:8px;">
+      <span class="app-header__wordmark">RFP Analyzer</span>
+    </a>
+    <span class="app-header__subtitle">V2 · Skill-based pipeline</span>
+  </header>
+
+  <!-- Left rail -->
+  <nav class="app-rail">
+    {% block rail %}{% endblock %}
+  </nav>
+
+  <!-- Main content -->
+  <main class="app-content">
+    {% block content %}{% endblock %}
+  </main>
+
+</div>
+<script src="/static/js/app.js?v={{ static_ver }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,140 @@
+<div class="ams-container" style="display: flex; flex-direction: column; gap: 24px;"><div class="card ams-section ams-section--apps" data-ams-section-name="apps" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="font-size:16px;font-weight:600;margin:0;">Artifact 1 · AMS Executive Summary</h3>
+        <span class="tag tag--ams" style="font-weight:600;">Managed Services Overview</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(130px, 1fr));gap:12px;margin-bottom:16px;" id="ams-kpi-grid">
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">Apps in Scope</div>
+          <div style="font-size:18px;font-weight:700;" id="ams-kpi-apps">1</div>
+        </div>
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">L1/L2/L3 Scope</div>
+          <div style="font-size:18px;font-weight:700;" id="ams-kpi-reqs">2</div>
+        </div>
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">SLAs &amp; DR</div>
+          <div style="font-size:18px;font-weight:700;" id="ams-kpi-slas">2</div>
+        </div>
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">Transition Items</div>
+          <div style="font-size:18px;font-weight:700;" id="ams-kpi-trans">1</div>
+        </div>
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">Penalties / LD</div>
+          <div style="font-size:18px;font-weight:700;color:#b91c1c;" id="ams-kpi-penalties">0</div>
+        </div>
+        <div style="background:var(--paper);padding:10px 14px;border-radius:4px;border:1px solid var(--border);">
+          <div style="font-size:11px;color:#6b7280;text-transform:uppercase;">Clarifications</div>
+          <div style="font-size:18px;font-weight:700;color:#d97706;" id="ams-kpi-clarifications">0</div>
+        </div>
+      </div>
+      <button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="overview_app" data-allowed-types="[&quot;overview_app&quot;]">+ Add item</button>
+      
+      <div style="margin-top:12px;">
+        <h4 style="font-size:13px;text-transform:uppercase;color:#4b5563;margin-bottom:8px;">In-Scope Applications &amp; Environments</h4>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid var(--border);color:#6b7280;">
+              <th style="padding:6px 8px;">ID</th>
+              <th style="padding:6px 8px;">Application</th>
+              <th style="padding:6px 8px;">Category / Function</th>
+              <th style="padding:6px 8px;">Criticality</th>
+              <th style="padding:6px 8px;">Target / Spec</th>
+              <th style="padding:6px 8px;">Section</th>
+              <th style="padding:6px 8px;"></th>
+            </tr>
+          </thead>
+          <tbody><tr style="border-bottom:1px solid #f0f2f5;"><td style="padding:6px 8px;font-family:var(--font-mono);font-size:11px;">AMS-001</td><td style="padding:6px 8px;font-weight:600;">Core Banking System</td><td style="padding:6px 8px;">Finance</td><td style="padding:6px 8px;"><span class="badge ">high</span></td><td style="padding:6px 8px;">99.99% availability</td><td style="padding:6px 8px;font-size:11px;color:#6b7280;">Section 2.1</td><td style="padding:6px 8px;" class="ams-row-actions"></td></tr></tbody>
+        </table>
+      </div>
+    
+    </div><div class="card ams-section ams-section--requirements" data-ams-section-name="requirements" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);"><h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Artifact 2 · AMS Requirement Register (L1 / L2 / L3 &amp; Operations)</h3><button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="req_classification" data-allowed-types="[&quot;req_classification&quot;,&quot;ticket_volume&quot;,&quot;tool&quot;,&quot;governance&quot;,&quot;deliverable&quot;,&quot;resource&quot;]">+ Add requirement</button><ul class="req-list"><li class="req-row"><span class="tag tag--ams">req classification</span><div class="req-row__body">
+      <div class="req-row__title">
+        <span style="font-family:var(--font-mono);font-size:11px;color:#6b7280;margin-right:6px;">AMS-002</span>
+        L2 Application Support
+        <span class="badge" style="background:#e0f2fe;color:#0369a1;font-weight:600;margin-left:6px;">L2</span>
+        
+        
+      </div>
+      <div class="req-row__desc">Second-level support for all in-scope applications.</div>
+      
+      <div class="req-row__meta">
+        
+        <span>MUST</span>
+        <span>Section 3.1</span>
+        
+        
+        <span class="confidence-bar">
+    <span class="confidence-bar__track">
+      <span class="confidence-bar__fill" style="width:87%"></span>
+    </span>
+    <span>87%</span>
+  </span>
+      </div>
+      
+    </div></li><li class="req-row"><span class="tag tag--ams">governance</span><div class="req-row__body">
+      <div class="req-row__title">
+        <span style="font-family:var(--font-mono);font-size:11px;color:#6b7280;margin-right:6px;">AMS-006</span>
+        Monthly Service Review
+        
+        
+        
+      </div>
+      <div class="req-row__desc">Vendor must host monthly service review meeting with client CIO.</div>
+      
+      <div class="req-row__meta">
+        
+        <span>MUST</span>
+        <span>Section 7.1</span>
+        
+        
+        <span class="confidence-bar">
+    <span class="confidence-bar__track">
+      <span class="confidence-bar__fill" style="width:82%"></span>
+    </span>
+    <span>82%</span>
+  </span>
+      </div>
+      
+    </div></li></ul></div><div class="card ams-section ams-section--sla" data-ams-section-name="sla" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);"><h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Artifact 3 · SLA Matrix, Availability &amp; Disaster Recovery</h3><button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="sla_target" data-allowed-types="[&quot;sla_target&quot;,&quot;availability&quot;,&quot;rto_rpo&quot;,&quot;sr_change_sla&quot;]">+ Add SLA</button>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;margin-top:8px;">
+          <thead>
+            <tr style="text-align:left;border-bottom:1px solid var(--border);color:#6b7280;">
+              <th style="padding:6px 8px;">ID</th>
+              <th style="padding:6px 8px;">Priority / Level</th>
+              <th style="padding:6px 8px;">SLA Title &amp; Commitment</th>
+              <th style="padding:6px 8px;">Type</th>
+              <th style="padding:6px 8px;">Target Value</th>
+              <th style="padding:6px 8px;">Penalty / LD</th>
+              <th style="padding:6px 8px;">Section</th>
+              <th style="padding:6px 8px;"></th>
+            </tr>
+          </thead>
+          <tbody><tr style="border-bottom:1px solid #f0f2f5;"><td style="padding:6px 8px;font-family:var(--font-mono);font-size:11px;">AMS-003</td><td style="padding:6px 8px;"><span class="badge badge--critical">P1</span></td><td style="padding:6px 8px;font-weight:600;">Incident Resolution SLA - P1</td><td style="padding:6px 8px;">incident_resolution</td><td style="padding:6px 8px;font-weight:600;color:var(--color-ams);">4 hours</td><td style="padding:6px 8px;color:#b91c1c;">5% monthly fee credit</td><td style="padding:6px 8px;font-size:11px;color:#6b7280;">Section 4.2</td><td style="padding:6px 8px;" class="ams-row-actions"></td></tr><tr style="border-bottom:1px solid #f0f2f5;"><td style="padding:6px 8px;font-family:var(--font-mono);font-size:11px;">AMS-004</td><td style="padding:6px 8px;"><span class="badge ">—</span></td><td style="padding:6px 8px;font-weight:600;">System Availability</td><td style="padding:6px 8px;">availability</td><td style="padding:6px 8px;font-weight:600;color:var(--color-ams);">99.95%</td><td style="padding:6px 8px;color:#b91c1c;">—</td><td style="padding:6px 8px;font-size:11px;color:#6b7280;">Section 4.3</td><td style="padding:6px 8px;" class="ams-row-actions"></td></tr></tbody>
+        </table>
+      </div><div class="card ams-section ams-section--transition" data-ams-section-name="transition" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);"><h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px;">Artifact 4 · Transition Assessment &amp; Knowledge Transfer</h3><button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="transition_phase" data-allowed-types="[&quot;transition_phase&quot;,&quot;kt_requirement&quot;,&quot;exit_obligation&quot;]">+ Add transition item</button><ul class="req-list"><li class="req-row"><span class="tag tag--ams">transition phase</span><div class="req-row__body">
+      <div class="req-row__title">
+        <span style="font-family:var(--font-mono);font-size:11px;color:#6b7280;margin-right:6px;">AMS-005</span>
+        Transition Phase 1 — Discovery
+        
+        
+        
+      </div>
+      <div class="req-row__desc">90-day knowledge transfer and discovery phase.</div>
+      
+      <div class="req-row__meta">
+        
+        <span>MUST</span>
+        <span>Section 6.1</span>
+        
+        
+        <span class="confidence-bar">
+    <span class="confidence-bar__track">
+      <span class="confidence-bar__fill" style="width:85%"></span>
+    </span>
+    <span>85%</span>
+  </span>
+      </div>
+      
+    </div></li></ul></div><div class="card ams-section ams-section--penalties" data-ams-section-name="penalties" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);"><h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; color: rgb(185, 28, 28);">Artifact 5 · Penalty &amp; Commercial Risk Register</h3><button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="penalty" data-allowed-types="[&quot;penalty&quot;,&quot;liquidated_damages&quot;]">+ Add penalty</button><div class="empty">No specific SLA penalties or liquidated damages clauses found.</div></div><div class="card ams-section ams-section--clarifications" data-ams-section-name="clarifications" style="padding: 20px; background: var(--surface); border-radius: 6px; border: 1px solid var(--border);"><h3 style="font-size: 15px; font-weight: 600; margin-bottom: 12px; color: rgb(217, 119, 6);">Artifact 6 · Clarification Register &amp; Missing Information</h3><button class="add-item-btn" data-action="add-item" data-bucket="ams" data-primary-type="clarification_question" data-allowed-types="[&quot;clarification_question&quot;,&quot;assumption_dependency&quot;]">+ Add clarification</button><div class="empty">No missing information or clarification questions flagged.</div></div></div>

@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+
+{% block title %}Review Analysis — RFP Analyzer V2{% endblock %}
+
+{% block rail %}
+<div class="rail-section">
+  <div class="rail-section__label">Navigation</div>
+  <a href="/" class="rail-item">
+    <span class="rail-item__dot" style="background:var(--border)"></span>
+    New Analysis
+  </a>
+</div>
+
+<!-- Skill tabs in rail — populated by JS from fired_skills -->
+<div class="rail-section" id="rail-skills-section" style="display:none;">
+  <div class="rail-section__label">Skills Fired</div>
+  <div id="rail-skills-list"></div>
+</div>
+
+<div class="rail-section">
+  <div class="rail-section__label">Spine (always on)</div>
+  <div id="rail-spine-list">
+    <a class="rail-item" data-tab="compliance" onclick="switchTab('compliance');return false;" href="#">
+      <span class="rail-item__dot" style="background:var(--color-spine)"></span> Compliance
+    </a>
+    <a class="rail-item" data-tab="risk" onclick="switchTab('risk');return false;" href="#">
+      <span class="rail-item__dot" style="background:var(--color-spine)"></span> Risk
+    </a>
+    <a class="rail-item" data-tab="ambiguity" onclick="switchTab('ambiguity');return false;" href="#">
+      <span class="rail-item__dot" style="background:var(--color-spine)"></span> Ambiguity
+    </a>
+    <a class="rail-item" data-tab="commercial_structure" onclick="switchTab('commercial_structure');return false;" href="#">
+      <span class="rail-item__dot" style="background:var(--color-spine)"></span> Commercial Structure
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="loading-state" style="padding:40px 0; text-align:center; color:#8A9491;">
+  <div class="status-badge status-badge--running">Loading analysis…</div>
+</div>
+
+<div id="results-state" style="display:none;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+    <h1 class="page-title" id="page-title" style="margin:0;">RFP Analysis</h1>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <!-- Export menu -->
+      <div class="export-menu" id="export-menu" style="position:relative;display:inline-block;">
+        <button type="button" id="btn-export" class="btn btn--secondary btn--sm" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+        <div id="export-dropdown" role="menu" style="display:none;position:absolute;right:0;top:calc(100% + 4px);background:#fff;border:1px solid #e5e7eb;border-radius:6px;padding:12px;min-width:220px;z-index:200;box-shadow:0 4px 12px rgba(0,0,0,.12);">
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px;font-weight:600;color:#57606a;display:block;margin-bottom:4px;">Format</label>
+            <select id="export-format" style="width:100%;font-size:13px;padding:4px 6px;border:1px solid #e5e7eb;border-radius:4px;">
+              <option value="xlsx">Excel (.xlsx)</option>
+              <option value="md">Markdown (.md)</option>
+              <option value="json">JSON (.json)</option>
+            </select>
+          </div>
+          <div style="margin-bottom:8px;">
+            <label style="font-size:12px;font-weight:600;color:#57606a;display:block;margin-bottom:4px;">View</label>
+            <label style="font-size:13px;display:flex;gap:6px;align-items:center;margin-bottom:2px;cursor:pointer;">
+              <input type="radio" name="export-view" value="edited" checked> Edited
+            </label>
+            <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+              <input type="radio" name="export-view" value="original"> Original AI
+            </label>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:13px;display:flex;gap:6px;align-items:center;cursor:pointer;">
+              <input type="checkbox" id="export-include-removed"> Include removed items
+            </label>
+          </div>
+          <button type="button" id="btn-export-download" class="btn btn--primary btn--sm" style="width:100%;">Download</button>
+        </div>
+      </div>
+      <button type="button" id="btn-history" class="btn btn--secondary btn--sm" aria-haspopup="true" aria-expanded="false">History</button>
+      <button type="button" id="btn-reset-edits" class="btn btn--secondary btn--sm" data-action="reset-edits">Reset all edits</button>
+      <span id="save-indicator" class="save-indicator" style="display:none;"></span>
+    </div>
+  </div>
+  <div class="page-meta" id="page-meta"></div>
+
+  <!-- Summary stats -->
+  <div class="stats-bar" id="stats-bar"></div>
+
+  <!-- Tab bar -->
+  <div class="tab-bar" id="tab-bar"></div>
+
+  <!-- Tab panels -->
+  <div id="tab-panels"></div>
+</div>
+
+<div id="error-state" style="display:none; padding:40px 0; color:#C0392B; text-align:center;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>window.JOB_ID = '{{ job_id }}';</script>
+<script src="/static/js/review.js?v={{ static_ver }}"></script>
+<script src="/static/js/review-edit.js?v={{ static_ver }}"></script>
+<script>RV.boot();</script>
+{% endblock %}

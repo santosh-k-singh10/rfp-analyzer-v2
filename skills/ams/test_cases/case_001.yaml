@@ -1,0 +1,23 @@
+version: "2.0"
+skill: ams
+description: "Validates extraction of a Severity 1 SLA with service credit penalty under schema 2.0"
+input_excerpt: |
+  The vendor shall provide 24x7 support for Severity 1 incidents with a response time
+  of no more than 15 minutes and resolution within 4 hours. A service credit of 2% of
+  the monthly fee shall apply for each breach of the Severity 1 SLA.
+expected_fields:
+  - path: "items[0].title"
+    check: contains
+    value: "Severity 1"
+  - path: "items[0].target_value"
+    check: contains
+    value: "15 minutes"
+  - path: "items[0].penalty_type"
+    check: equals
+    value: "service_credit"
+  - path: "items[0].sla_type"
+    check: equals
+    value: "response_time"
+  - path: "items[0].artifact_type"
+    check: equals
+    value: "sla_target"

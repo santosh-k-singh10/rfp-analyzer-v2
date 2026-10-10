@@ -1,0 +1,118 @@
+version: "2.0"
+skill: ams
+items:
+  - field: id
+    type: string
+    required: false
+    description: System-assigned ID (e.g. AMS-SLA-001, AMS-L1-001, PEN-001, CQ-001, ASS-001). Never set by LLM.
+  - field: artifact_type
+    type: enum
+    values:
+      - overview_app
+      - req_classification
+      - ticket_volume
+      - tool
+      - governance
+      - deliverable
+      - resource
+      - sla_target
+      - availability
+      - rto_rpo
+      - sr_change_sla
+      - transition_phase
+      - kt_requirement
+      - exit_obligation
+      - penalty
+      - liquidated_damages
+      - clarification_question
+      - assumption_dependency
+    required: true
+    description: Which of the 6 AMS report artifacts/sections this item belongs to.
+  - field: title
+    type: string
+    required: true
+    description: Short descriptive label (e.g., 'Severity 1 Response Time', 'L1 Service Desk Logging', 'Oracle ERP Core Support')
+  - field: description
+    type: string
+    required: false
+    description: Detailed explanation or requirement specification
+  - field: category
+    type: string
+    required: false
+    description: Operational category (e.g. Service Desk, Incident Mgmt, Problem Mgmt, Change Mgmt, Monitoring, Transition, Governance, Tools, SLA, RTO/RPO)
+  - field: support_level
+    type: enum
+    values: [L1, L2, L3, L4_OEM, cross_functional, not_applicable]
+    required: false
+    default: not_applicable
+  - field: priority
+    type: enum
+    values: [must, should, could, wont, high, medium, low]
+    required: false
+  - field: impact
+    type: enum
+    values: [high, medium, low, info]
+    required: false
+    default: medium
+  - field: sla_type
+    type: enum
+    values: [response_time, resolution_time, availability, service_hours, escalation_time, service_request, change_sla, ticket_volume, transition_kt, staffing_ratio, continuous_improvement, other]
+    required: false
+  - field: severity_level
+    type: string
+    required: false
+    description: e.g. P1, P2, P3, P4, Critical, High, Medium, Low
+  - field: target_value
+    type: string
+    required: false
+    description: e.g. '15 minutes', '4 hours', '99.9%', '1200/month', '4 weeks'
+  - field: measurement_period
+    type: string
+    required: false
+  - field: penalty_type
+    type: enum
+    values: [service_credit, financial_penalty, liquidated_damages, none, unspecified]
+    required: false
+  - field: penalty_value
+    type: string
+    required: false
+    description: e.g. '2% of monthly fee', 'USD 5,000 per hour'
+  - field: confidence
+    type: float
+    required: false
+    description: Confidence score 0.0 - 1.0
+  - field: is_inferred
+    type: boolean
+    required: false
+    default: false
+    description: True if inferred from context rather than explicitly stated
+  - field: raw_excerpt
+    type: string
+    required: true
+    description: Verbatim source quote from RFP
+  - field: source_section
+    type: string
+    required: true
+    description: Section heading
+  - field: source_page
+    type: integer
+    required: false
+    description: Page number where requirement appears
+  - field: source_type
+    type: enum
+    values: [text, diagram]
+    required: true
+    default: text
+  - field: source_document
+    type: string
+    required: false
+    description: Original filename this item was extracted from
+  - field: document_role
+    type: enum
+    values: [primary, annexure, qna]
+    required: false
+    default: primary
+  - field: clarified_by
+    type: string
+    required: false
+    description: QnA question text when this item's value was determined or corrected by a QnA answer; null otherwise

@@ -1,0 +1,68 @@
+version: "1.0"
+skill: rate-card
+items:
+  - field: id
+    type: string
+    required: false
+    description: System-assigned ID (e.g. RR-001). Never set by LLM.
+  - field: role_title
+    type: string
+    required: true
+    description: Exact job title as named in the RFP
+  - field: seniority_level
+    type: string
+    required: false
+    description: e.g. Senior, L3, Associate — null if not specified
+  - field: location_tier
+    type: string
+    required: false
+    description: Onsite, Offshore, Hybrid — null if not specified
+  - field: pricing_model
+    type: enum
+    values: [time_and_material, fixed_monthly, outcome_based, unspecified]
+    required: true
+  - field: rate_unit
+    type: enum
+    values: [per_hour, per_day, per_month, unspecified]
+    required: true
+  - field: rate_value
+    type: string
+    required: false
+    description: Verbatim rate from RFP — null if not stated (never fabricate)
+  - field: min_commitment_period
+    type: string
+    required: false
+  - field: replacement_backfill_terms
+    type: string
+    required: false
+  - field: background_verification_required
+    type: boolean
+    required: false
+  - field: raw_excerpt
+    type: string
+    required: true
+  - field: source_section
+    type: string
+    required: true
+  - field: source_type
+    type: enum
+    values: [text, diagram]
+    required: true
+    default: text
+  - field: source_document
+    type: string
+    required: false
+    description: Original filename this item was extracted from
+  - field: document_role
+    type: enum
+    values: [primary, annexure, qna]
+    required: false
+    default: primary
+  - field: clarified_by
+    type: string
+    required: false
+    description: QnA question text when this item's value was determined or corrected by a QnA answer; null otherwise
+no_roles_stated_field:
+  field: no_roles_stated
+  type: boolean
+  description: Set to true when the RFP contains no explicit role list or rate card

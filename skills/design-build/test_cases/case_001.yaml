@@ -1,0 +1,24 @@
+version: "1.0"
+skill: design-build
+description: "Validates extraction of a non-functional performance requirement with ambiguity flag"
+input_excerpt: |
+  The system shall support a minimum of 500 concurrent users with all page loads completing
+  within 3 seconds under normal load. The vendor shall also provide role-based access control
+  with at least three distinct user tiers: administrator, standard user, and read-only viewer.
+  The go-live date is fixed at Week 16 from contract signing.
+expected_fields:
+  - path: "items[0].type"
+    check: equals
+    value: "non_functional"
+  - path: "items[0].priority"
+    check: equals
+    value: "must"
+  - path: "items[0].title"
+    check: contains
+    value: "Concurrent"
+  - path: "items[1].type"
+    check: equals
+    value: "functional"
+  - path: "items[1].title"
+    check: contains
+    value: "Access Control"

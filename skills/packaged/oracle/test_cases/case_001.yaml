@@ -1,0 +1,22 @@
+version: "1.0"
+skill: packaged-oracle
+description: "Validates extraction of Oracle module scope and CEMLI customization constraint"
+input_excerpt: |
+  The implementation scope covers Oracle Fusion Cloud ERP including General Ledger (GL),
+  Accounts Payable (AP), and Fixed Assets (FA). License model is Oracle Named User Plus
+  (NUP) with an initial allocation of 250 users. All customizations shall be strictly
+  limited to Oracle-approved CEMLI extension points; direct database table modifications
+  are expressly prohibited.
+expected_fields:
+  - path: "items[0].item_type"
+    check: equals
+    value: "module_scope"
+  - path: "items[0].oracle_products"
+    check: contains
+    value: "Oracle Fusion Cloud ERP"
+  - path: "items[1].item_type"
+    check: equals
+    value: "license_metric"
+  - path: "items[1].quantified_value"
+    check: contains
+    value: "250"
