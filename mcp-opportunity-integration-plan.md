@@ -16,12 +16,12 @@ Enable RFP Analyzer V2 to automatically ingest RFP documents for a specific Oppo
   - Configuration setting `RAW_STORAGE_BASE_DIR` added to `app/config.py` with default fallback to `C:\Agents\StarterKit-v0.1\Framework\backend\data\storage\inputs\raw`.
   - Helper `resolve_opportunity_files(opp_id: str)` that resolves directory path (e.g., `{RAW_STORAGE_BASE_DIR}/{opp_id}` or scans directory structures) and returns valid document paths with role assignments (`primary`, `annexure`, `qna`).
 - **Todo List**:
-  - [ ] Add `get_raw_storage_dir()` in `app/config.py` supporting `RAW_STORAGE_BASE_DIR` environment variable.
-  - [ ] Implement `core/opportunity_resolver.py` to discover and classify files in the opportunity folder.
+  - [x] Add `get_raw_storage_dir()` in `app/config.py` supporting `RAW_STORAGE_BASE_DIR` environment variable.
+  - [x] Implement `core/opportunity_resolver.py` to discover and classify files in the opportunity folder.
 - **Relevant Context**:
   - `app/config.py`
   - Allowed file types: `.pdf`, `.docx`, `.doc`, `.txt`, `.xlsx`, `.xls`
-- **Status**: `[ ] pending`
+- **Status**: `[x] done`
 
 ---
 
@@ -32,13 +32,13 @@ Enable RFP Analyzer V2 to automatically ingest RFP documents for a specific Oppo
   - Job store supports lookup by `opp_id` (`get_job_by_opp_id(opp_id)`).
   - Background pipeline runner supports copying or linking files from the resolved opportunity folder into the job's upload directory.
 - **Todo List**:
-  - [ ] Add `opp_id` field to `AnalysisJob` and `job.json` serialization/deserialization.
-  - [ ] Add `get_job_by_opp_id` and indexing in `JobStore`.
-  - [ ] Create `start_opportunity_analysis(opp_id, background_tasks)` service function in `app/routers/analysis.py`.
+  - [x] Add `opp_id` field to `AnalysisJob` and `job.json` serialization/deserialization.
+  - [x] Add `get_job_by_opp_id` and indexing in `JobStore`.
+  - [x] Create `start_opportunity_analysis(opp_id, background_tasks)` service function in `app/routers/analysis.py`.
 - **Relevant Context**:
   - `app/job_store.py`
   - `app/routers/analysis.py`
-- **Status**: `[ ] pending`
+- **Status**: `[x] done`
 
 ---
 
@@ -49,14 +49,14 @@ Enable RFP Analyzer V2 to automatically ingest RFP documents for a specific Oppo
   - `POST /analyze/opportunity?opp_id=...` endpoint added for direct REST invocation.
   - `GET /jobs/opportunity/{opp_id}` endpoint added for querying status by opportunity ID.
 - **Todo List**:
-  - [ ] Update `GET /` in `app/main.py` to handle `opp_id` query parameter with immediate job creation and redirect.
-  - [ ] Add `POST /analyze/opportunity` and `GET /jobs/opportunity/{opp_id}` in `app/routers/analysis.py`.
-  - [ ] Update review page UI breadcrumbs/header to display opportunity ID when available.
+  - [x] Update `GET /` in `app/main.py` to handle `opp_id` query parameter with immediate job creation and redirect.
+  - [x] Add `POST /analyze/opportunity` and `GET /jobs/opportunity/{opp_id}` in `app/routers/analysis.py`.
+  - [x] Update review page UI breadcrumbs/header to display opportunity ID when available.
 - **Relevant Context**:
   - `app/main.py`
   - `app/routers/analysis.py`
   - `app/templates/review.html`
-- **Status**: `[ ] pending`
+- **Status**: `[x] done`
 
 ---
 
@@ -70,14 +70,14 @@ Enable RFP Analyzer V2 to automatically ingest RFP documents for a specific Oppo
     - `list_opportunities()`: Lists available opportunity folders in storage.
   - Command-line entry point to launch MCP server via stdio or SSE.
 - **Todo List**:
-  - [ ] Add MCP dependencies (e.g. `mcp`) if needed or create standalone stdio/JSON-RPC MCP server.
-  - [ ] Create `mcp_server.py` with tools `analyze_opportunity_rfp`, `get_opportunity_analysis`, `list_opportunities`.
-  - [ ] Add instructions for configuring MCP client in `README.md`.
+  - [x] Add MCP dependencies (e.g. `mcp`) if needed or create standalone stdio/JSON-RPC MCP server.
+  - [x] Create `mcp_server.py` with tools `analyze_opportunity_rfp`, `get_opportunity_analysis`, `list_opportunities`.
+  - [x] Add instructions for configuring MCP client in `README.md`.
 - **Relevant Context**:
   - `pipeline/graph.py`
   - `app/job_store.py`
   - `core/opportunity_resolver.py`
-- **Status**: `[ ] pending`
+- **Status**: `[x] done`
 
 ---
 
@@ -87,6 +87,6 @@ Enable RFP Analyzer V2 to automatically ingest RFP documents for a specific Oppo
   - Automated test verifying folder discovery with mock/sample opportunity directory.
   - End-to-end verification of `/?opp_id=...` flow and MCP tool invocations.
 - **Todo List**:
-  - [ ] Create test case in `tests/test_opportunity_analysis.py`.
-  - [ ] Verify execution with sample test files.
-- **Status**: `[ ] pending`
+  - [x] Create test case in `tests/test_opportunity_analysis.py`.
+  - [x] Verify execution with sample test files.
+- **Status**: `[x] done`

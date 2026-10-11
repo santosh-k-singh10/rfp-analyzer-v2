@@ -95,7 +95,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>window.JOB_ID = '{{ job_id }}';</script>
+<script>window.JOB_ID = '{{ job_id }}'; window.OPP_ID = null;</script>
 <script src="/static/js/review.js?v={{ static_ver }}"></script>
 <script src="/static/js/review-edit.js?v={{ static_ver }}"></script>
 <script>RV.boot();</script>

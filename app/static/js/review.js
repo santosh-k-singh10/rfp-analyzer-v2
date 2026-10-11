@@ -171,6 +171,7 @@
     await loadSkillLabels();
     try {
       const data = await V2.apiGet(`/jobs/${JOB_ID}`);
+      if (data.opp_id && window.OPP_ID === null) { window.OPP_ID = data.opp_id; }
       if (data.status === 'complete' && data.result) {
         state.editState = data.edit_state || null;
         if (data.edit_state && data.edit_state.revision != null) {
@@ -184,6 +185,7 @@
         V2.pollJob(JOB_ID,
           () => {},
           (d) => {
+            if (d.opp_id && window.OPP_ID === null) { window.OPP_ID = d.opp_id; }
             state.editState = d.edit_state || null;
             if (d.edit_state && d.edit_state.revision != null) {
               state.revision = d.edit_state.revision;
@@ -216,8 +218,9 @@
     }
 
     document.getElementById('page-title').textContent = fileName || 'RFP Analysis';
+    const oppLabel = (typeof OPP_ID !== 'undefined' && OPP_ID) ? ` · Opp ${OPP_ID}` : '';
     document.getElementById('page-meta').textContent =
-      `Job ${JOB_ID} · ${result.fired_skills.length ? result.fired_skills.join(', ') : '—'}`;
+      `Job ${JOB_ID}${oppLabel} · ${result.fired_skills.length ? result.fired_skills.join(', ') : '—'}`;
 
     renderStats(result);
     renderTabBar(result);

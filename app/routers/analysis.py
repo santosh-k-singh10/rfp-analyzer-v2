@@ -238,6 +238,8 @@ async def get_job(job_id: str = Depends(validate_job_id), view: Optional[str] = 
         "created_at": job.created_at,
         "updated_at": job.updated_at,
     }
+    if job.opp_id:
+        response["opp_id"] = job.opp_id
     if job.error:
         response["error"] = job.error
     if job.output_dir:
@@ -372,6 +374,8 @@ async def list_jobs() -> dict[str, Any]:
             "file_count": len(j.file_names),
             "created_at": j.created_at,
         }
+        if j.opp_id:
+            entry["opp_id"] = j.opp_id
         if j.output_dir:
             entry["output_files"] = {
                 "json": f"{j.output_dir}/result.json",
@@ -379,3 +383,187 @@ async def list_jobs() -> dict[str, Any]:
             }
         job_list.append(entry)
     return {"jobs": job_list}
+
+
+@router.post("/analyze/opportunity")
+async def analyze_opportunity(
+    background_tasks: BackgroundTasks,
+    opp_id: str,
+    force: bool = False,
+) -> dict[str, Any]:
+    """Trigger analysis for an opportunity ID from the raw storage folder.
+
+    Query parameters
+    ----------------
+    opp_id : str
+        Opportunity identifier (e.g. ``"OPP-2024-001"``).
+    force : bool, optional
+        When ``True``, always creates a new job even if one is already running
+        or complete for this opportunity.  Default ``False``.
+
+    Returns immediately with the job ID and current status.
+    """
+    job = await start_opportunity_analysis(
+        opp_id=opp_id,
+        background_tasks=background_tasks,
+        force=force,
+    )
+    return {
+        "job_id": job.job_id,
+        "status": job.status.value,
+        "opp_id": opp_id,
+    }
+
+
+@router.get("/jobs/opportunity/{opp_id}")
+async def get_job_by_opp_id(opp_id: str) -> dict[str, Any]:
+    """Return the most recent job for the given opportunity ID.
+
+    Equivalent to ``GET /jobs/{job_id}`` but looked up by opportunity ID
+    rather than job UUID.  Returns 404 when no job has been started for this
+    opportunity.
+    """
+    store = get_job_store()
+    job = store.get_job_by_opp_id(opp_id)
+    if job is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No job found for opportunity '{opp_id}'",
+        )
+
+    response: dict[str, Any] = {
+        "job_id": job.job_id,
+        "status": job.status,
+        "opp_id": job.opp_id,
+        "file_name": job.file_name,
+        "file_names": job.file_names,
+        "primary_file_name": job.primary_file_name,
+        "file_count": len(job.file_names),
+        "created_at": job.created_at,
+        "updated_at": job.updated_at,
+    }
+    if job.error:
+        response["error"] = job.error
+    if job.output_dir:
+        response["output_files"] = {
+            "json": f"{job.output_dir}/result.json",
+            "markdown": f"{job.output_dir}/result.md",
+        }
+    return response
+
+
+async def start_opportunity_analysis(
+    opp_id: str,
+    background_tasks: BackgroundTasks,
+    force: bool = False,
+) -> AnalysisJob:
+    """Resolve files for *opp_id* and schedule an analysis pipeline run.
+
+    Args:
+        opp_id: Opportunity identifier (e.g. ``"OPP-2024-001"``).
+        background_tasks: FastAPI ``BackgroundTasks`` to schedule the pipeline.
+        force: When ``True``, always create a new job even if a RUNNING or
+            COMPLETE job already exists for this opportunity.
+
+    Returns:
+        The :class:`~app.job_store.AnalysisJob` (new or existing).
+
+    Raises:
+        HTTPException 404: When no directory / files are found for *opp_id*.
+        HTTPException 400: When the resolved directory contains no supported files.
+    """
+    from core.opportunity_resolver import resolve_opportunity_files
+
+    store = get_job_store()
+
+    # ── De-duplicate: return existing active/complete job unless forced ───────
+    if not force:
+        existing = store.get_job_by_opp_id(opp_id)
+        if existing and existing.status in ("running", "complete"):
+            log.info(
+                "opportunity_analysis_reuse",
+                opp_id=opp_id,
+                job_id=existing.job_id,
+                status=existing.status,
+            )
+            return existing
+
+    # ── Resolve files from storage ────────────────────────────────────────────
+    try:
+        opp_files = resolve_opportunity_files(opp_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not opp_files.file_paths:
+        raise HTTPException(
+            status_code=400,
+            detail=f"No supported documents found for opportunity '{opp_id}'.",
+        )
+
+    # ── Copy files into an isolated upload directory for this job ─────────────
+    # We use a deterministic staging area under uploads/{job_placeholder}/ and
+    # then rename it to uploads/{job_id}/ after the job is created.  Using a
+    # temp name avoids a race between directory creation and job ID assignment.
+    import tempfile
+
+    upload_base = get_upload_dir()
+    upload_base.mkdir(parents=True, exist_ok=True)
+    stage_dir = Path(tempfile.mkdtemp(dir=upload_base, prefix=f"opp_{opp_id}_"))
+
+    saved_paths: list[str] = []
+    saved_names: list[str] = []
+    final_roles: dict[str, str] = {}
+
+    for src in opp_files.file_paths:
+        dest = stage_dir / src.name
+        shutil.copy2(src, dest)
+        saved_paths.append(str(dest))
+        saved_names.append(src.name)
+        final_roles[src.name] = opp_files.file_roles.get(src.name, "primary")
+        log.info("opp_file_staged", opp_id=opp_id, filename=src.name, dest=str(dest))
+
+    primary_src = opp_files.primary_file_path
+    primary_name = primary_src.name if primary_src else saved_names[0]
+    primary_path = str(stage_dir / primary_name)
+    final_roles[primary_name] = "primary"
+
+    # ── Create job ────────────────────────────────────────────────────────────
+    job = store.create_job(
+        file_name=primary_name,
+        file_path=primary_path,
+        file_names=saved_names,
+        file_paths=saved_paths,
+        file_roles=final_roles,
+        primary_file_name=primary_name,
+        primary_file_path=primary_path,
+        opp_id=opp_id,
+    )
+
+    # Rename staging dir to match job_id for clear traceability
+    final_upload_dir = upload_base / job.job_id
+    stage_dir.rename(final_upload_dir)
+
+    # Update paths to reflect the renamed directory
+    job.file_paths = [str(final_upload_dir / Path(p).name) for p in saved_paths]
+    job.primary_file_path = str(final_upload_dir / primary_name)
+    job.file_path = job.primary_file_path
+
+    final_file_paths = job.file_paths
+    final_primary_path = job.primary_file_path
+
+    # ── Schedule pipeline ─────────────────────────────────────────────────────
+    background_tasks.add_task(
+        _run_pipeline,
+        job.job_id,
+        final_file_paths,
+        final_primary_path,
+        final_roles,
+    )
+
+    log.info(
+        "opportunity_analysis_started",
+        opp_id=opp_id,
+        job_id=job.job_id,
+        file_count=len(final_file_paths),
+    )
+    return job

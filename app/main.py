@@ -4,7 +4,8 @@ app/main.py
 FastAPI application entry point for the V2 RFP Analyzer.
 
 Routes:
-  GET  /             → home.html (file upload UI)
+  GET  /             → home.html (file upload UI); if ?opp_id= given, launches
+                       opportunity analysis and redirects to /review/{job_id}
   GET  /review/{id}  → review.html (results viewer)
   POST /analyze      → upload file, kick off pipeline, return job_id
   GET  /jobs/{id}    → job status + results
@@ -17,10 +18,10 @@ from __future__ import annotations
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -88,9 +89,35 @@ app.include_router(skills_router.router)
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-@app.get("/", response_class=HTMLResponse)
-async def home(request: Request) -> HTMLResponse:
-    """Serve the home page (file upload)."""
+@app.get("/", response_class=HTMLResponse, response_model=None)
+async def home(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    opp_id: Optional[str] = Query(default=None),
+) -> HTMLResponse | RedirectResponse:
+    """Serve the home page (file upload).
+
+    If ``?opp_id=`` is supplied, resolves the opportunity files, kicks off
+    analysis (or reuses an existing active/complete job), and issues a 303
+    redirect to ``/review/{job_id}`` so the browser lands on the status page.
+
+    On resolution failure the home page is rendered with an ``error`` message.
+    """
+    if opp_id:
+        from app.routers.analysis import start_opportunity_analysis
+        try:
+            job = await start_opportunity_analysis(
+                opp_id=opp_id,
+                background_tasks=background_tasks,
+            )
+        except HTTPException as exc:
+            return templates.TemplateResponse(
+                "home.html",
+                {"request": request, "error": exc.detail},
+                status_code=exc.status_code,
+            )
+        return RedirectResponse(url=f"/review/{job.job_id}", status_code=303)
+
     return templates.TemplateResponse("home.html", {"request": request})
 
 

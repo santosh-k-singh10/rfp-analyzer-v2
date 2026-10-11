@@ -59,6 +59,7 @@ class AnalysisJob(BaseModel):
     result: Optional[dict[str, Any]] = None  # no longer populated after 0.4 (amendment 14)
     error: Optional[str] = None
     output_dir: Optional[str] = None          # path to {OUTPUT_DIR}/{job_id}/
+    opp_id: Optional[str] = None              # opportunity ID (if triggered via opp flow)
 
 
 class JobStore:
@@ -85,6 +86,7 @@ class JobStore:
             "created_at": job.created_at,
             "updated_at": job.updated_at,
             "error": job.error,
+            "opp_id": job.opp_id,
         }
         atomic_write(out_dir / "job.json", json.dumps(payload, indent=2))
 
@@ -99,6 +101,7 @@ class JobStore:
         file_roles: dict[str, str] | None = None,
         primary_file_name: str = "",
         primary_file_path: str = "",
+        opp_id: Optional[str] = None,
     ) -> AnalysisJob:
         """Create a new job, write its output directory and initial job.json.
 
@@ -126,6 +129,7 @@ class JobStore:
             created_at=now,
             updated_at=now,
             output_dir=str(output_dir),
+            opp_id=opp_id,
         )
         self._jobs[job.job_id] = job
         try:
@@ -197,6 +201,33 @@ class JobStore:
         """Return all jobs ordered by creation time (newest first)."""
         return sorted(self._jobs.values(), key=lambda j: j.created_at, reverse=True)
 
+    def get_job_by_opp_id(self, opp_id: str) -> Optional[AnalysisJob]:
+        """Return the most recent active/complete job for *opp_id*, or None.
+
+        Preference order (descending priority):
+        1. RUNNING  — an in-flight job should be reused immediately.
+        2. COMPLETE — a finished job is returned if no active job exists.
+        3. PENDING  — a queued but not-yet-started job.
+        4. FAILED   — only returned if no other status is available.
+
+        Within the same priority tier the most recently *created* job wins.
+        """
+        candidates = [j for j in self._jobs.values() if j.opp_id == opp_id]
+        if not candidates:
+            return None
+
+        _priority = {
+            JobStatus.RUNNING: 0,
+            JobStatus.COMPLETE: 1,
+            JobStatus.PENDING: 2,
+            JobStatus.FAILED: 3,
+        }
+        # Find the highest-priority tier present, then return the most recently
+        # created job within that tier.
+        best_tier = min(_priority.get(j.status, 9) for j in candidates)
+        tier_jobs = [j for j in candidates if _priority.get(j.status, 9) == best_tier]
+        return max(tier_jobs, key=lambda j: j.created_at)
+
     # ── Disk persistence ──────────────────────────────────────────────────────
 
     def load_from_disk(self, output_dir: Path) -> None:
@@ -248,6 +279,7 @@ class JobStore:
                     updated_at=data.get("updated_at", ""),
                     error=data.get("error"),
                     output_dir=str(job_output_dir),
+                    opp_id=data.get("opp_id"),
                 )
                 self._jobs[job_id] = job
                 log.info("job_restored_from_disk", job_id=job_id, status=status_str)

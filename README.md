@@ -33,6 +33,63 @@ uvicorn app.main:app --reload
 
 The app will be available at `http://localhost:8000`.
 
+## Opportunity ID Analysis
+
+Documents for an opportunity live in `{RAW_STORAGE_BASE_DIR}/{opp_id}/` (set `RAW_STORAGE_BASE_DIR` in `.env`). They can be analyzed without uploading:
+
+- Browser: `http://localhost:8001/?opp_id=OPP-2024-001` (starts analysis and redirects to the review page)
+- REST: `POST /analyze/opportunity?opp_id=...[&force=true]` and `GET /jobs/opportunity/{opp_id}`
+- MCP: see below
+
+## MCP Server
+
+`mcp_server.py` exposes the analyzer as a [Model Context Protocol](https://modelcontextprotocol.io) server (built on the `mcp` package, installed with `pip install -e .`).
+
+| Tool | Description |
+|------|-------------|
+| `analyze_opportunity_rfp(opp_id, force=False)` | Resolves the opportunity's files, starts (or reuses) the background pipeline, returns `job_id`, `status`, and a browser `review_url`. |
+| `get_opportunity_analysis(opp_id)` | Returns status; once complete also a summary (archetypes, item counts, metadata), risks, and the Markdown report. Returns `not_started` if no analysis exists. |
+| `list_opportunities()` | Lists opportunity folders in `RAW_STORAGE_BASE_DIR` with file counts, file types, and analysis status. |
+
+### Running
+
+```bash
+python mcp_server.py                              # stdio (default)
+python mcp_server.py --transport sse --port 8002  # SSE at http://127.0.0.1:8002/sse
+python -m mcp_server --transport stdio
+```
+
+Options: `--transport {stdio,sse}`, `--host` (SSE bind address, default `127.0.0.1`), `--port` (SSE port, default `8002`).
+
+The `review_url` host is taken from the `RFP_ANALYZER_BASE_URL` environment variable (default `http://localhost:8001`). The analysis runs inside the MCP server process; jobs are persisted under `OUTPUT_DIR`, so results are shared with the web app after it restarts.
+
+### Configuring MCP clients (stdio)
+
+Bob, Claude Desktop, Cursor, and other clients use the same JSON shape. Use absolute paths:
+
+```json
+{
+  "mcpServers": {
+    "rfp-analyzer-v2": {
+      "command": "python",
+      "args": ["C:/Agents/V2/mcp_server.py"],
+      "env": {
+        "RAW_STORAGE_BASE_DIR": "C:/path/to/storage/inputs/raw",
+        "RFP_ANALYZER_BASE_URL": "http://localhost:8001"
+      }
+    }
+  }
+}
+```
+
+- Bob: add this to `.bob/mcp.json` (project) or `~/.bob/mcp.json` (global), or use Settings → MCP → Edit Project/Global MCP.
+- Claude Desktop: `claude_desktop_config.json`.
+- Cursor: `.cursor/mcp.json`.
+
+For SSE, start the server yourself and point the client at `http://127.0.0.1:8002/sse` (client key is typically `url`). The SSE transport has no authentication; keep it bound to localhost.
+
+LLM credentials are read from the project's `.env` (see Installation).
+
 ## How to Add a New Skill
 
 1. Create a folder under `skills/` (e.g. `skills/my-new-skill/`)
@@ -78,4 +135,5 @@ V2/
   pipeline/        # LangGraph pipeline wiring
   promotion/       # Skill promotion workflow (test harness)
   app/             # FastAPI application, templates, static assets
+  mcp_server.py    # MCP server (stdio / SSE)
 ```
