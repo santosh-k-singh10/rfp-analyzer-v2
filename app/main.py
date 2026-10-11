@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import AsyncGenerator, Optional
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Query, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -137,32 +137,51 @@ async def summary_page(
     request: Request,
     background_tasks: BackgroundTasks,
     opp_id: Optional[str] = Query(default=None),
-) -> HTMLResponse | RedirectResponse:
+) -> HTMLResponse | JSONResponse | RedirectResponse:
     """Serve the summary dashboard page.
 
     If ``?opp_id=`` is supplied, resolves the opportunity files, kicks off
     summary extraction (or reuses an existing active/complete job), and renders
     ``summary.html`` so the browser can poll for results.
 
-    On resolution failure the home page is rendered with an ``error`` message.
+    If client requests JSON (``Accept: application/json``), returns a JSON payload.
     """
+    wants_json = "application/json" in request.headers.get("accept", "") or request.query_params.get("format") == "json"
+
     if opp_id:
-        from app.routers.summary import start_summary_analysis
+        from app.routers.summary import _get_job_summary, start_summary_analysis
         try:
             job = await start_summary_analysis(
                 opp_id=opp_id,
                 background_tasks=background_tasks,
             )
         except HTTPException as exc:
+            if wants_json:
+                raise exc
             return templates.TemplateResponse(
                 "home.html",
                 {"request": request, "error": exc.detail},
                 status_code=exc.status_code,
             )
+
+        if wants_json:
+            status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
+            return JSONResponse(
+                content={
+                    "job_id": job.job_id,
+                    "opp_id": opp_id,
+                    "status": status_str,
+                    "rfp_summary": _get_job_summary(job),
+                }
+            )
+
         return templates.TemplateResponse(
             "summary.html",
             {"request": request, "opp_id": opp_id, "job_id": job.job_id},
         )
+
+    if wants_json:
+        return JSONResponse(content={"status": "ok", "message": "RFP Summary Service"})
 
     return templates.TemplateResponse(
         "summary.html",

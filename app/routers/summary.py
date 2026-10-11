@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 import structlog
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, UploadFile
 
 from app.config import get_output_dir, get_upload_dir
 from app.dependencies import validate_job_id
@@ -232,6 +232,148 @@ async def analyze_opportunity_summary(
         "status": status_str,
         "opp_id": opp_id,
     }
+
+
+@router.post("/summary")
+async def analyze_summary(
+    request: Request,
+    background_tasks: BackgroundTasks,
+) -> dict[str, Any]:
+    """Upload one or more documents or provide opp_id to trigger summary extraction.
+
+    Accepts:
+      - Multipart form data with ``files: list[UploadFile]`` (and optional ``primary_filename``, ``roles``).
+      - Multipart / URL-encoded form data with ``opp_id``.
+      - JSON body ``{"opp_id": "...", "force": false}``.
+      - Query parameters ``?opp_id=...&force=false``.
+
+    Returns immediately with ``{"job_id": "...", "status": "pending", "opp_id": "..."}``.
+    """
+    content_type = request.headers.get("content-type", "")
+    files: list[UploadFile] = []
+    opp_id: Optional[str] = None
+    primary_filename: Optional[str] = None
+    roles: Optional[str] = None
+    force: bool = False
+
+    # Parse JSON body if present
+    if "application/json" in content_type:
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                opp_id = body.get("opp_id") or opp_id
+                primary_filename = body.get("primary_filename") or primary_filename
+                if body.get("roles"):
+                    roles = body.get("roles") if isinstance(body.get("roles"), str) else json.dumps(body.get("roles"))
+                if "force" in body:
+                    force = bool(body.get("force"))
+        except Exception:
+            pass
+    elif "multipart/form-data" in content_type or "application/x-www-form-urlencoded" in content_type:
+        try:
+            form = await request.form()
+            opp_id = form.get("opp_id") or opp_id
+            primary_filename = form.get("primary_filename") or primary_filename
+            roles = form.get("roles") or roles
+            if "force" in form:
+                force = str(form.get("force")).lower() in ("true", "1", "yes")
+            form_files = (
+                form.getlist("files")
+                or form.getlist("file")
+                or [v for _, v in form.multi_items() if hasattr(v, "filename") and v.filename]
+            )
+            files = [f for f in form_files if hasattr(f, "filename") and f.filename]
+        except Exception as exc:
+            log.warning("summary_form_parse_error", error=str(exc))
+
+    # Query params fallback
+    opp_id = request.query_params.get("opp_id") or opp_id
+    if "force" in request.query_params:
+        force = request.query_params.get("force", "").lower() in ("true", "1", "yes")
+
+    # Path A: opp_id provided without direct file uploads
+    if opp_id and not files:
+        job = await start_summary_analysis(
+            opp_id=opp_id,
+            background_tasks=background_tasks,
+            force=force,
+        )
+        status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
+        return {
+            "job_id": job.job_id,
+            "status": status_str,
+            "opp_id": opp_id,
+        }
+
+    # Path B: direct file uploads
+    if files:
+        allowed_extensions = {".pdf", ".docx", ".doc", ".txt", ".xlsx", ".xls"}
+        role_map: dict[str, str] = {}
+        if roles:
+            try:
+                role_map = json.loads(roles) if isinstance(roles, str) else dict(roles)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                raise HTTPException(status_code=400, detail="'roles' must be a valid JSON object.")
+
+        job_folder = get_upload_dir() / str(uuid.uuid4())
+        job_folder.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: list[str] = []
+        saved_names: list[str] = []
+
+        for upload in files:
+            fname = upload.filename or f"upload_{len(saved_paths)}"
+            file_ext = Path(fname).suffix.lower()
+            if file_ext not in allowed_extensions:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported file type '{file_ext}' in '{fname}'. "
+                           f"Supported: {', '.join(allowed_extensions)}",
+                )
+            dest = job_folder / fname
+            with open(dest, "wb") as f:
+                shutil.copyfileobj(upload.file, f)
+            saved_paths.append(str(dest))
+            saved_names.append(fname)
+            log.info("summary_file_uploaded", filename=fname, path=str(dest))
+
+        if primary_filename and primary_filename in saved_names:
+            primary_name = primary_filename
+        else:
+            primary_name = saved_names[0]
+
+        primary_path = str(job_folder / primary_name)
+        final_roles: dict[str, str] = {name: role_map.get(name, "primary") for name in saved_names}
+        final_roles[primary_name] = "primary"
+
+        store = get_job_store()
+        job = store.create_job(
+            file_name=primary_name,
+            file_path=primary_path,
+            file_names=saved_names,
+            file_paths=saved_paths,
+            file_roles=final_roles,
+            primary_file_name=primary_name,
+            primary_file_path=primary_path,
+            opp_id=opp_id,
+        )
+
+        background_tasks.add_task(
+            _run_summary_pipeline_job,
+            job.job_id,
+            saved_paths,
+            primary_path,
+            final_roles,
+        )
+
+        status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
+        return {
+            "job_id": job.job_id,
+            "status": status_str,
+            "opp_id": opp_id,
+        }
+
+    raise HTTPException(status_code=400, detail="Either 'opp_id' or 'files' must be provided.")
 
 
 @router.get("/summary/opportunity/{opp_id}")

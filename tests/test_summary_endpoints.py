@@ -414,6 +414,53 @@ class TestPostSummaryOpportunityEndpoint:
 
         assert resp.status_code == 400
 
+    def test_post_summary_with_json_body(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        client, store, output_dir, upload_dir = _make_client(tmp_path, monkeypatch)
+        opp_dir = tmp_path / "raw" / "OPP-JSON-1"
+        opp_dir.mkdir(parents=True)
+        opp_files = _make_opp_files("OPP-JSON-1", opp_dir, [("rfp.pdf", "primary")])
+
+        with (
+            patch("app.routers.summary._run_summary_pipeline_job", side_effect=_noop_summary_pipeline),
+            patch("core.opportunity_resolver.resolve_opportunity_files", return_value=opp_files),
+            patch("app.routers.summary.get_job_store", return_value=store),
+            patch("app.routers.summary.get_upload_dir", return_value=upload_dir),
+            patch("app.config.get_output_dir", return_value=output_dir),
+            patch("app.config.get_upload_dir", return_value=upload_dir),
+        ):
+            resp = client.post("/summary", json={"opp_id": "OPP-JSON-1"})
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["opp_id"] == "OPP-JSON-1"
+        assert "job_id" in data
+
+    def test_post_summary_with_file_upload(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
+        client, store, output_dir, upload_dir = _make_client(tmp_path, monkeypatch)
+        pdf_bytes = b"%PDF-1.4 dummy content"
+
+        with (
+            patch("app.routers.summary._run_summary_pipeline_job", side_effect=_noop_summary_pipeline),
+            patch("app.routers.summary.get_job_store", return_value=store),
+            patch("app.routers.summary.get_upload_dir", return_value=upload_dir),
+            patch("app.config.get_output_dir", return_value=output_dir),
+            patch("app.config.get_upload_dir", return_value=upload_dir),
+        ):
+            resp = client.post(
+                "/summary",
+                files=[("files", ("test.pdf", pdf_bytes, "application/pdf"))],
+                data={"primary_filename": "test.pdf"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "job_id" in data
+        assert data["status"] in ("pending", "running", "complete")
+
 
 # ---------------------------------------------------------------------------
 # 4. GET /summary/opportunity/{opp_id} endpoint tests
