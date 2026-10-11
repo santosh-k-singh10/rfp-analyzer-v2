@@ -224,7 +224,7 @@
 
     renderStats(result);
     renderTabBar(result);
-    renderRail(result.fired_skills || []);
+    renderRail(result.fired_skills || [], !!result.rfp_summary);
 
     // Show first tab — wrap in try/catch so a rendering error in the first
     // tab doesn't replace the whole page with #error-state.
@@ -290,28 +290,40 @@
         `<button class="tab tab--spine" data-tab="${t.id}" onclick="switchTab('${t.id}')">${t.icon} ${t.label}</button>`
       );
     });
+
+    // Summary tab — only when rfp_summary data is present
+    if (result.rfp_summary) {
+      bar.insertAdjacentHTML('beforeend',
+        `<button class="tab" data-tab="summary" onclick="switchTab('summary')">&#x2211; Summary</button>`
+      );
+    }
   }
 
-  function renderRail(firedSlugs) {
+  function renderRail(firedSlugs, hasSummary) {
     const section = document.getElementById('rail-skills-section');
     const list    = document.getElementById('rail-skills-list');
-    if (!firedSlugs.length) { section.style.display = 'none'; return; }
-    section.style.display = '';
-    list.innerHTML = '';
-    firedSlugs.forEach(slug => {
-      const label = SKILL_LABELS[slug] || slug;
-      const cls   = V2.skillClass(slug);
-      const el = document.createElement('a');
-      el.className = 'rail-item';
-      el.href = '#';
-      el.dataset.tab = slug;
-      el.onclick = (e) => { e.preventDefault(); window.switchTab(slug); };
-      el.innerHTML = `
-        <span class="rail-item__dot" style="background:var(--color-${cls})"></span>
-        ${label}
-      `;
-      list.appendChild(el);
-    });
+    if (!firedSlugs.length) { section.style.display = 'none'; } else {
+      section.style.display = '';
+      list.innerHTML = '';
+      firedSlugs.forEach(slug => {
+        const label = SKILL_LABELS[slug] || slug;
+        const cls   = V2.skillClass(slug);
+        const el = document.createElement('a');
+        el.className = 'rail-item';
+        el.href = '#';
+        el.dataset.tab = slug;
+        el.onclick = (e) => { e.preventDefault(); window.switchTab(slug); };
+        el.innerHTML = `
+          <span class="rail-item__dot" style="background:var(--color-${cls})"></span>
+          ${label}
+        `;
+        list.appendChild(el);
+      });
+    }
+
+    // Show/hide summary rail section
+    const summarySection = document.getElementById('rail-summary-section');
+    if (summarySection) summarySection.style.display = hasSummary ? '' : 'none';
   }
 
   // ── switchTab ────────────────────────────────────────────────────────────
@@ -336,6 +348,10 @@
 
     if (!state.result) return;
 
+    if (tabId === 'summary') {
+      renderSummaryPanel(state.result.rfp_summary, panels);
+      return;
+    }
     const spineIds = SPINE_TABS.map(t => t.id);
     if (spineIds.includes(tabId)) {
       renderSpinePanel(tabId, panels);
@@ -980,6 +996,127 @@
     return li;
   }
 
+  // ── Summary panel ────────────────────────────────────────────────────────
+
+  function renderSummaryPanel(summary, container) {
+    if (!summary) {
+      container.innerHTML = '<div class="empty">No summary data available for this job.</div>';
+      return;
+    }
+
+    const meta     = summary.rfp_metadata || {};
+    const dates    = summary.key_dates    || [];
+    const overview = summary.rfp_overview || {};
+
+    // ── Confidence pill helper ────────────────────────────────────────────
+    function confPill(level) {
+      const map = {
+        high:   ['#EDFBF3', '#1A7040', '#74C996'],
+        medium: ['#FFF8EC', '#8B5200', '#E8C96A'],
+        low:    ['#FDECEA', '#C0392B', '#F5A9A9'],
+      };
+      const c = map[level] || map.medium;
+      return `<span style="display:inline-flex;align-items:center;font-size:0.68rem;font-weight:600;border-radius:3px;padding:1px 6px;background:${c[0]};color:${c[1]};border:1px solid ${c[2]};">${esc(level)}</span>`;
+    }
+
+    // ── Meta card helper ──────────────────────────────────────────────────
+    function metaCard(label, value) {
+      if (!value) return '';
+      return `<div class="panel" style="padding:var(--space-4);margin:0;">
+        <div style="font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">${esc(label)}</div>
+        <div style="font-size:0.9rem;font-weight:500;color:var(--ink);">${esc(value)}</div>
+      </div>`;
+    }
+
+    // ── Header block ──────────────────────────────────────────────────────
+    const oppId = (typeof window.OPP_ID !== 'undefined' && window.OPP_ID) ? window.OPP_ID : null;
+    let actionHtml = '';
+    if (oppId) {
+      actionHtml = `<a href="/summary?opp_id=${esc(oppId)}" class="btn btn--secondary btn--sm" style="text-decoration:none;">Open Summary View →</a>`;
+    }
+
+    const titleHtml = meta.rfp_title
+      ? `<h2 style="font-family:var(--font-serif);font-size:1.4rem;font-weight:400;margin-bottom:var(--space-2);">${esc(meta.rfp_title)}</h2>`
+      : '';
+
+    const cardsHtml = [
+      metaCard('Client', meta.client_name),
+      metaCard('Reference', meta.rfp_reference_number),
+      metaCard('Issuing Dept.', meta.issuing_department),
+      metaCard('Est. Value', meta.estimated_contract_value),
+      metaCard('Duration', meta.contract_duration),
+    ].filter(Boolean).join('');
+
+    const metaGridHtml = cardsHtml
+      ? `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--space-4);margin-top:var(--space-5);">${cardsHtml}</div>`
+      : '';
+
+    // ── Key dates table ───────────────────────────────────────────────────
+    let datesHtml = '';
+    if (!dates.length) {
+      datesHtml = '<div class="empty">No key dates extracted.</div>';
+    } else {
+      const rows = dates.map(d => `<tr>
+        <td style="padding:8px 10px;font-family:var(--font-mono);font-size:0.78rem;color:#6B7C75;white-space:nowrap;">${esc(d.date_id || '—')}</td>
+        <td style="padding:8px 10px;font-weight:500;font-size:0.875rem;">${esc(d.label || '—')}</td>
+        <td style="padding:8px 10px;font-size:0.875rem;white-space:nowrap;">${esc(d.display_date || '—')}</td>
+        <td style="padding:8px 10px;font-family:var(--font-mono);font-size:0.78rem;color:#6B7C75;white-space:nowrap;">${esc(d.date_value || '—')}</td>
+        <td style="padding:8px 10px;font-size:0.8rem;color:#4A5A54;font-style:italic;max-width:220px;">${esc(d.raw_excerpt || '')}</td>
+        <td style="padding:8px 10px;">${confPill(d.confidence || 'medium')}</td>
+      </tr>`).join('');
+      datesHtml = `<div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead><tr>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">ID</th>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Milestone</th>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Display Date</th>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">ISO Value</th>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Excerpt</th>
+            <th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Confidence</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+    }
+
+    // ── Narrative overview ────────────────────────────────────────────────
+    let narHtml = '';
+    if (overview.summary) {
+      narHtml += `<p style="font-size:0.9rem;line-height:1.7;color:var(--ink);margin-bottom:var(--space-5);">${esc(overview.summary)}</p>`;
+    }
+    if (overview.scope_highlights && overview.scope_highlights.length) {
+      narHtml += `<div style="font-size:0.75rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--space-2);">Scope Highlights</div>
+        <ul style="list-style:none;padding:0;margin:0 0 var(--space-5) 0;">`;
+      overview.scope_highlights.forEach(h => {
+        narHtml += `<li style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.875rem;">
+          <span style="color:var(--accent);flex-shrink:0;margin-top:2px;">&#x25AA;</span>
+          <span>${esc(h)}</span></li>`;
+      });
+      narHtml += '</ul>';
+    }
+    if (overview.client_context) {
+      narHtml += `<div style="font-size:0.75rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--space-2);">Client Context</div>
+        <p style="font-size:0.875rem;color:#4A5A54;line-height:1.6;font-style:italic;">${esc(overview.client_context)}</p>`;
+    }
+    if (!narHtml) narHtml = '<div class="empty">No narrative overview available.</div>';
+
+    // ── Assemble ──────────────────────────────────────────────────────────
+    container.innerHTML = `
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-4);flex-wrap:wrap;margin-bottom:var(--space-6);">
+        <div>${titleHtml}${metaGridHtml}</div>
+        <div style="flex-shrink:0;">${actionHtml}</div>
+      </div>
+      <div class="panel" style="margin-bottom:var(--space-6);">
+        <div class="panel__title">Key Dates &amp; Milestones</div>
+        ${datesHtml}
+      </div>
+      <div class="panel">
+        <div class="panel__title">Executive Overview</div>
+        ${narHtml}
+      </div>
+    `;
+  }
+
   // ── findItemByUid — walks all item arrays ─────────────────────────────────
 
   function findItemByUid(uid) {
@@ -1033,6 +1170,7 @@
     renderTabPanel,
     renderSkillPanel,
     renderSpinePanel,
+    renderSummaryPanel,
     renderTabFooter: _renderTabFooter,
     renderAMSArtifacts,
     renderAMSApps,

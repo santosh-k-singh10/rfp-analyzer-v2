@@ -89,7 +89,12 @@ def _finish_job(env: dict[str, Path], job_id: str, result: dict[str, Any], md: s
 
 async def test_tools_registered() -> None:
     tools = {t.name for t in await mcp_server.mcp.list_tools()}
-    assert tools == {"analyze_opportunity_rfp", "get_opportunity_analysis", "list_opportunities"}
+    assert tools == {
+        "analyze_opportunity_rfp",
+        "get_opportunity_analysis",
+        "get_rfp_summary",
+        "list_opportunities",
+    }
 
 
 def test_cli_defaults() -> None:
@@ -291,7 +296,10 @@ async def test_stdio_transport_end_to_end(tmp_path: Path) -> None:
             await session.initialize()
             tools = await session.list_tools()
             assert {t.name for t in tools.tools} == {
-                "analyze_opportunity_rfp", "get_opportunity_analysis", "list_opportunities",
+                "analyze_opportunity_rfp",
+                "get_opportunity_analysis",
+                "get_rfp_summary",
+                "list_opportunities",
             }
             res = await session.call_tool("list_opportunities", {})
             assert not res.isError

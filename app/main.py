@@ -4,13 +4,16 @@ app/main.py
 FastAPI application entry point for the V2 RFP Analyzer.
 
 Routes:
-  GET  /             → home.html (file upload UI); if ?opp_id= given, launches
-                       opportunity analysis and redirects to /review/{job_id}
-  GET  /review/{id}  → review.html (results viewer)
-  POST /analyze      → upload file, kick off pipeline, return job_id
-  GET  /jobs/{id}    → job status + results
-  GET  /jobs         → list all jobs
-  GET  /skills       → skill registry info
+  GET  /                 → home.html (file upload UI); if ?opp_id= given, launches
+                           opportunity analysis and redirects to /review/{job_id}
+  GET  /review/{id}      → review.html (results viewer)
+  GET  /summary          → summary.html (summary UI); if ?opp_id= given, kicks off
+                           summary extraction and renders the summary dashboard
+  GET  /summary/{job_id} → summary.html pre-loaded for a specific job
+  POST /analyze          → upload file, kick off pipeline, return job_id
+  GET  /jobs/{id}        → job status + results
+  GET  /jobs             → list all jobs
+  GET  /skills           → skill registry info
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ from app.routers import analysis as analysis_router
 from app.routers import edits as edits_router
 from app.routers import exports as exports_router
 from app.routers import skills as skills_router
+from app.routers import summary as summary_router
 from logging_config import configure_logging
 
 configure_logging()
@@ -82,6 +86,7 @@ app.include_router(analysis_router.router)
 app.include_router(edits_router.router)
 app.include_router(exports_router.router)
 app.include_router(skills_router.router)
+app.include_router(summary_router.router)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -125,6 +130,53 @@ async def home(
 async def review(request: Request, job_id: str) -> HTMLResponse:
     """Serve the review page for a completed analysis job."""
     return templates.TemplateResponse("review.html", {"request": request, "job_id": job_id})
+
+
+@app.get("/summary", response_class=HTMLResponse, response_model=None)
+async def summary_page(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    opp_id: Optional[str] = Query(default=None),
+) -> HTMLResponse | RedirectResponse:
+    """Serve the summary dashboard page.
+
+    If ``?opp_id=`` is supplied, resolves the opportunity files, kicks off
+    summary extraction (or reuses an existing active/complete job), and renders
+    ``summary.html`` so the browser can poll for results.
+
+    On resolution failure the home page is rendered with an ``error`` message.
+    """
+    if opp_id:
+        from app.routers.summary import start_summary_analysis
+        try:
+            job = await start_summary_analysis(
+                opp_id=opp_id,
+                background_tasks=background_tasks,
+            )
+        except HTTPException as exc:
+            return templates.TemplateResponse(
+                "home.html",
+                {"request": request, "error": exc.detail},
+                status_code=exc.status_code,
+            )
+        return templates.TemplateResponse(
+            "summary.html",
+            {"request": request, "opp_id": opp_id, "job_id": job.job_id},
+        )
+
+    return templates.TemplateResponse(
+        "summary.html",
+        {"request": request, "opp_id": None, "job_id": None},
+    )
+
+
+@app.get("/summary/{job_id}", response_class=HTMLResponse)
+async def summary_job_page(request: Request, job_id: str) -> HTMLResponse:
+    """Serve the summary dashboard for an existing job ID."""
+    return templates.TemplateResponse(
+        "summary.html",
+        {"request": request, "opp_id": None, "job_id": job_id},
+    )
 
 
 @app.get("/health")

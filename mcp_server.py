@@ -3,12 +3,13 @@ mcp_server.py
 -------------
 Model Context Protocol (MCP) server for RFP Analyzer V2.
 
-Exposes three tools so external AI clients (Bob, Claude Desktop, Cursor, ...)
-can run and inspect RFP analyses by Opportunity ID:
+Exposes tools so external AI clients (Bob, Claude Desktop, Cursor, ...)
+can run and inspect RFP analyses and executive summaries by Opportunity ID:
 
-* ``analyze_opportunity_rfp(opp_id, force=False)``
-* ``get_opportunity_analysis(opp_id)``
-* ``list_opportunities()``
+* ``analyze_opportunity_rfp(opp_id, force=False)``  — RFP Full Analysis (deep multi-archetype)
+* ``get_opportunity_analysis(opp_id)``               — RFP Full Analysis results
+* ``get_rfp_summary(opp_id, force=False)``          — RFP Summary (fast executive extraction)
+* ``list_opportunities()``                          — List opportunity folders & statuses
 
 Run::
 
@@ -37,8 +38,9 @@ from fastapi import BackgroundTasks, HTTPException
 from mcp.server.fastmcp import FastMCP
 
 from app.config import get_raw_storage_dir
-from app.job_store import JobStore, get_job_store
+from app.job_store import JobStatus, JobStore, get_job_store
 from app.routers.analysis import start_opportunity_analysis
+from app.routers.summary import start_summary_analysis
 from core.opportunity_resolver import VALID_EXTENSIONS
 
 _PROJECT_ROOT = Path(__file__).resolve().parent
@@ -50,9 +52,9 @@ mcp = FastMCP(
     "rfp-analyzer-v2",
     instructions=(
         "Analyze RFP documents stored under an Opportunity ID. "
-        "Use list_opportunities to discover IDs, analyze_opportunity_rfp to start "
-        "(or reuse) an analysis, and get_opportunity_analysis to poll status and "
-        "read results."
+        "Use list_opportunities to discover IDs; "
+        "use get_rfp_summary for fast executive summary (client metadata, milestone dates, scope overview); "
+        "use analyze_opportunity_rfp and get_opportunity_analysis for full multi-archetype deep analysis."
     ),
 )
 
@@ -70,6 +72,10 @@ def _web_base_url() -> str:
 
 def _review_url(job_id: str) -> str:
     return f"{_web_base_url()}/review/{job_id}"
+
+
+def _summary_url(opp_id: str) -> str:
+    return f"{_web_base_url()}/summary?opp_id={opp_id}"
 
 
 def _refresh_store() -> JobStore:
@@ -108,6 +114,26 @@ def _load_result(output_dir: Path) -> Optional[dict[str, Any]]:
     return None
 
 
+def _load_summary(output_dir: Path) -> Optional[dict[str, Any]]:
+    """Load the summary document (summary.json preferred, fallback to result.json)."""
+    summary_path = output_dir / "summary.json"
+    if summary_path.exists():
+        try:
+            return json.loads(summary_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    for name in ("working.json", "result.json"):
+        path = output_dir / name
+        if path.exists():
+            try:
+                doc = json.loads(path.read_text(encoding="utf-8"))
+                if isinstance(doc, dict) and doc.get("rfp_summary"):
+                    return doc["rfp_summary"]
+            except Exception:
+                pass
+    return None
+
+
 def _active(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Drop items the user removed in the review UI."""
     return [i for i in items if i.get("_meta", {}).get("status", "active") != "removed"]
@@ -139,12 +165,16 @@ def _summarize(doc: dict[str, Any]) -> dict[str, Any]:
 
 @mcp.tool()
 async def analyze_opportunity_rfp(opp_id: str, force: bool = False) -> dict[str, Any]:
-    """Start (or reuse) an RFP analysis for an Opportunity ID.
+    """Start (or reuse) a Full RFP Analysis for an Opportunity ID.
 
+    Runs the comprehensive deep analysis pipeline (archetype classification,
+    skill modules, compliance, ambiguity, risk, commercial structure).
     Resolves the opportunity's documents from raw storage and launches the
-    analysis pipeline in the background.  Returns immediately with the job ID,
-    status, and a browser URL for the review page.  Poll
+    analysis pipeline in the background. Returns immediately with the job ID,
+    status, and a browser URL for the review page. Poll
     ``get_opportunity_analysis`` for results.
+
+    For fast executive summary only, use ``get_rfp_summary``.
 
     Args:
         opp_id: Opportunity identifier (a folder name under raw storage).
@@ -177,10 +207,13 @@ async def analyze_opportunity_rfp(opp_id: str, force: bool = False) -> dict[str,
 
 @mcp.tool()
 async def get_opportunity_analysis(opp_id: str) -> dict[str, Any]:
-    """Get the analysis status and results for an Opportunity ID.
+    """Get Full RFP Analysis status and results for an Opportunity ID.
 
-    Returns the job status; when complete also returns a summary (archetypes,
-    item counts, metadata), the risks, and the full Markdown report.
+    Returns the job status for the comprehensive analysis pipeline; when
+    complete also returns a summary (archetypes, item counts, metadata),
+    the identified risks, and the full Markdown report.
+
+    For fast executive summary only, use ``get_rfp_summary``.
     """
     store = _refresh_store()
     job = store.get_job_by_opp_id(opp_id)
@@ -213,6 +246,80 @@ async def get_opportunity_analysis(opp_id: str) -> dict[str, Any]:
         md_path = output_dir / "result.md"
         if md_path.exists():
             response["markdown"] = md_path.read_text(encoding="utf-8")
+    return response
+
+
+@mcp.tool()
+async def get_rfp_summary(opp_id: str, force: bool = False) -> dict[str, Any]:
+    """Get executive RFP summary (client metadata, key dates, narrative overview).
+
+    Fast extraction tool focused on client metadata, milestone scheduling dates,
+    and executive narrative scope highlights.
+    Checks if a completed job exists for the Opportunity ID with summary data.
+    If not found or if force=True, starts a fast summary extraction pipeline
+    in the background.
+
+    For comprehensive deep analysis with archetypes and risks, use
+    ``analyze_opportunity_rfp`` / ``get_opportunity_analysis``.
+
+    Args:
+        opp_id: Opportunity identifier (a folder name under raw storage).
+        force: Start a new summary extraction even if one is complete.
+    """
+    store = _refresh_store()
+    job = store.get_job_by_opp_id(opp_id) if not force else None
+
+    # Check if existing job is complete and has summary data
+    if job and (job.status == JobStatus.COMPLETE or (hasattr(job.status, "value") and job.status.value == "complete") or job.status == "complete") and job.output_dir:
+        summary_data = _load_summary(Path(job.output_dir))
+        if summary_data:
+            status_val = job.status.value if hasattr(job.status, "value") else str(job.status)
+            return {
+                "opp_id": opp_id,
+                "job_id": job.job_id,
+                "status": status_val,
+                "summary_url": _summary_url(opp_id),
+                "rfp_metadata": summary_data.get("rfp_metadata", {}),
+                "key_dates": summary_data.get("key_dates", []),
+                "rfp_overview": summary_data.get("rfp_overview", {}),
+            }
+
+    # Check if existing job is failed
+    if job and (job.status == JobStatus.FAILED or (hasattr(job.status, "value") and job.status.value == "failed") or job.status == "failed"):
+        status_val = job.status.value if hasattr(job.status, "value") else str(job.status)
+        return {
+            "opp_id": opp_id,
+            "job_id": job.job_id,
+            "status": status_val,
+            "summary_url": _summary_url(opp_id),
+            "error": job.error or "Analysis failed",
+        }
+
+    # If not found or force=True or existing job does not have completed summary:
+    tasks = BackgroundTasks()
+    try:
+        job = await start_summary_analysis(opp_id=opp_id, background_tasks=tasks, force=force)
+    except HTTPException as exc:
+        raise ValueError(str(exc.detail)) from exc
+    _spawn_background(tasks)
+
+    status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
+    response: dict[str, Any] = {
+        "opp_id": opp_id,
+        "job_id": job.job_id,
+        "status": status_str,
+        "summary_url": _summary_url(opp_id),
+    }
+    if job.error:
+        response["error"] = job.error
+
+    if status_str == "complete" and job.output_dir:
+        summary_data = _load_summary(Path(job.output_dir))
+        if summary_data:
+            response["rfp_metadata"] = summary_data.get("rfp_metadata", {})
+            response["key_dates"] = summary_data.get("key_dates", [])
+            response["rfp_overview"] = summary_data.get("rfp_overview", {})
+
     return response
 
 

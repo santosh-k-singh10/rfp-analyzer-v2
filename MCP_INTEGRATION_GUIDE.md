@@ -21,6 +21,7 @@ flowchart TD
     subgraph MCPServer [MCP Server :8002 / stdio]
         ToolAnalyze[Tool: analyze_opportunity_rfp]
         ToolGet[Tool: get_opportunity_analysis]
+        ToolSummary[Tool: get_rfp_summary]
         ToolList[Tool: list_opportunities]
     end
 
@@ -153,8 +154,9 @@ The MCP server is implemented in `mcp_server.py` using Python's official `mcp` S
 
 | Tool Name | Parameters | Description |
 |---|---|---|
-| `analyze_opportunity_rfp` | `opp_id: str`<br/>`force: bool = False` | Resolves files from the raw storage folder, starts background analysis (or reuses existing run), and returns `job_id`, `status`, and `review_url`. |
-| `get_opportunity_analysis` | `opp_id: str` | Retrieves status, archetype scores, top risk items, skills extraction counts, and full Markdown report for the opportunity. |
+| `get_rfp_summary` | `opp_id: str`<br/>`force: bool = False` | **RFP Summary**: Fast executive extraction returning client metadata, key milestone dates, narrative overview / scope highlights, status, and `summary_url` (`/summary?opp_id=...`). Reuses existing completed summary or triggers background extraction. |
+| `analyze_opportunity_rfp` | `opp_id: str`<br/>`force: bool = False` | **RFP Full Analysis**: Starts (or reuses) deep multi-archetype analysis (skills extraction, compliance, ambiguity, risk, commercial structure) and returns `job_id`, `status`, and `review_url`. |
+| `get_opportunity_analysis` | `opp_id: str` | **RFP Full Analysis**: Retrieves status, archetype scores, top risk items, skills extraction counts, and full Markdown report for the opportunity. |
 | `list_opportunities` | *(none)* | Scans `RAW_STORAGE_BASE_DIR` and returns a list of all opportunities with file counts, detected extensions, and current analysis status. |
 
 ---

@@ -47,8 +47,9 @@ Documents for an opportunity live in `{RAW_STORAGE_BASE_DIR}/{opp_id}/` (set `RA
 
 | Tool | Description |
 |------|-------------|
-| `analyze_opportunity_rfp(opp_id, force=False)` | Resolves the opportunity's files, starts (or reuses) the background pipeline, returns `job_id`, `status`, and a browser `review_url`. |
-| `get_opportunity_analysis(opp_id)` | Returns status; once complete also a summary (archetypes, item counts, metadata), risks, and the Markdown report. Returns `not_started` if no analysis exists. |
+| `get_rfp_summary(opp_id, force=False)` | **RFP Summary**: Fast executive extraction returning client metadata, milestone dates, overview / scope highlights, status, and `summary_url` (`/summary?opp_id=...`). |
+| `analyze_opportunity_rfp(opp_id, force=False)` | **RFP Full Analysis**: Resolves opportunity files, starts (or reuses) the deep background pipeline, returns `job_id`, `status`, and `review_url`. |
+| `get_opportunity_analysis(opp_id)` | **RFP Full Analysis**: Returns full status; once complete also archetype scores, item counts, metadata, risks, and Markdown report. |
 | `list_opportunities()` | Lists opportunity folders in `RAW_STORAGE_BASE_DIR` with file counts, file types, and analysis status. |
 
 ### Running

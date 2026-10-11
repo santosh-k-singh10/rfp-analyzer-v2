@@ -33,6 +33,7 @@ from core.schemas import (
     ClassifierOutput,
     DocumentChunk,
     PipelineState,
+    RfpSummaryOutput,
     SkillOutput,
     SpineOutput,
     SynthesizedOutput,
@@ -201,6 +202,45 @@ async def classify_node(state: PipelineState) -> dict[str, Any]:
         return {"classifier_output": empty, "fired_skills": [], "errors": [f"Classification failed: {exc}"]}
 
 
+async def summary_node(state: PipelineState) -> dict[str, Any]:
+    """
+    Extract RFP summary metadata and narrative overview concurrently.
+
+    Uses chunks_with_vision when available (so diagram descriptions are
+    included in the overview), falling back to plain chunks. Both LLM calls
+    run in a single asyncio.gather.
+
+    Writes rfp_summary (RfpSummaryOutput) to state.
+    """
+    from pipeline.summary_extractor import (
+        extract_rfp_summary_metadata,
+        extract_rfp_overview,
+    )
+
+    chunks = state.get("chunks_with_vision") or state.get("chunks", [])
+    log.info("pipeline_summary_start", chunks=len(chunks))
+
+    try:
+        metadata_result, overview_result = await asyncio.gather(
+            extract_rfp_summary_metadata(chunks),
+            extract_rfp_overview(chunks),
+        )
+        rfp_summary = RfpSummaryOutput.model_validate({
+            **metadata_result,
+            **overview_result,
+        })
+        log.info(
+            "pipeline_summary_done",
+            key_dates=len(rfp_summary.key_dates),
+            has_overview=bool(rfp_summary.rfp_overview.summary),
+        )
+    except Exception as exc:
+        log.warning("pipeline_summary_error", error=str(exc))
+        rfp_summary = RfpSummaryOutput()
+
+    return {"rfp_summary": rfp_summary}
+
+
 async def skill_and_spine_node(state: PipelineState) -> dict[str, Any]:
     """
     Run skill extraction and all four spine agents in TRUE parallel.
@@ -274,10 +314,10 @@ async def skill_and_spine_node(state: PipelineState) -> dict[str, Any]:
 
 async def synthesize_node(state: PipelineState) -> dict[str, Any]:
     """
-    Assemble the final SynthesizedOutput from skill and spine results.
+    Assemble the final SynthesizedOutput from skill, spine, and summary results.
 
-    Reads skill_outputs and spine_* keys from state, calls synthesize(),
-    and writes synthesized_output.
+    Reads skill_outputs, spine_* keys, and rfp_summary from state, calls
+    synthesize(), and writes synthesized_output.
     """
     from synthesizer.synthesizer import synthesize
 
@@ -301,6 +341,10 @@ async def synthesize_node(state: PipelineState) -> dict[str, Any]:
             "job_id": state.get("job_id", ""),
             "fired_skills": fired_skills,
         })
+        # Carry rfp_summary from state into the final result
+        rfp_summary = state.get("rfp_summary")
+        if rfp_summary is not None:
+            result.rfp_summary = rfp_summary
         return {"synthesized_output": result}
     except Exception as exc:
         log.error("pipeline_synthesize_error", error=str(exc))
@@ -319,10 +363,12 @@ def build_graph() -> Any:
 
     Graph topology (linear — parallelism is inside each node via asyncio.gather):
         ingest → vision → classify → skill_and_spine → synthesize → END
+                                  ↘ summary_node ↗
 
-    skill_and_spine is a single node that launches all skill agents and all four
-    spine agents concurrently via asyncio.gather, replacing the two-branch
-    fan-out that LangGraph silently serialised.
+    skill_and_spine launches all skill agents and all four spine agents
+    concurrently via asyncio.gather.  summary_node runs the two RFx Summary
+    LLM calls concurrently.  Both run in parallel after classify via LangGraph's
+    fan-out, converging at synthesize.
 
     Returns the compiled graph ready for ainvoke().
     """
@@ -332,13 +378,18 @@ def build_graph() -> Any:
     builder.add_node("vision", vision_node)
     builder.add_node("classify", classify_node)
     builder.add_node("skill_and_spine", skill_and_spine_node)
+    builder.add_node("summary", summary_node)
     builder.add_node("synthesize", synthesize_node)
 
     builder.set_entry_point("ingest")
     builder.add_edge("ingest", "vision")
     builder.add_edge("vision", "classify")
+    # Fan-out: skill_and_spine and summary run in parallel after classify
     builder.add_edge("classify", "skill_and_spine")
+    builder.add_edge("classify", "summary")
+    # Both branches converge at synthesize
     builder.add_edge("skill_and_spine", "synthesize")
+    builder.add_edge("summary", "synthesize")
     builder.add_edge("synthesize", END)
 
     return builder.compile()

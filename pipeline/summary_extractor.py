@@ -28,7 +28,7 @@ from core.llm_client import (
     pack_chunks,
     format_batch_user_content,
 )
-from core.schemas import DocumentChunk
+from core.schemas import DocumentChunk, RfpSummaryOutput
 
 log = structlog.get_logger()
 
@@ -236,3 +236,74 @@ async def extract_rfp_overview(chunks: list[DocumentChunk]) -> dict[str, Any]:
     overview = result_obj.get("rfp_overview") or {}
     log.info("summary_overview_done", has_summary=bool(overview.get("summary")))
     return {"rfp_overview": overview}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fast standalone runner
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+async def run_summary_pipeline(
+    file_paths: list[str],
+    primary_file_path: str,
+    file_roles: dict[str, str] | None = None,
+) -> RfpSummaryOutput:
+    """Fast summary-only pipeline: ingest files, run both extractions in parallel.
+
+    Parameters
+    ----------
+    file_paths:
+        All document file paths (primary first, then annexures/QnA).
+    primary_file_path:
+        The designated primary RFP document (must be in file_paths).
+    file_roles:
+        Optional mapping of basename → role ("primary"/"annexure"/"qna").
+        Defaults all files to "primary" when omitted.
+
+    Returns
+    -------
+    RfpSummaryOutput
+        Validated summary output — metadata, key dates, and overview.
+        Returns a default (empty) RfpSummaryOutput on any ingestion failure.
+    """
+    from pathlib import Path
+    from core.ingestor import ingest_document
+
+    if file_roles is None:
+        file_roles = {}
+
+    # ── Ingest all files into chunks ─────────────────────────────────────────
+    all_chunks: list[DocumentChunk] = []
+    for fp in file_paths:
+        fname = Path(fp).name
+        role = file_roles.get(fname, "primary")
+        try:
+            chunks = ingest_document(fp, source_document=fname, document_role=role)
+            all_chunks.extend(chunks)
+            log.info("summary_pipeline_ingest", file=fname, chunks=len(chunks))
+        except Exception as exc:
+            log.warning("summary_pipeline_ingest_error", file=fname, error=str(exc))
+
+    if not all_chunks:
+        log.warning("summary_pipeline_no_chunks")
+        return RfpSummaryOutput()
+
+    # ── Run metadata and overview extractions concurrently ───────────────────
+    try:
+        metadata_result, overview_result = await asyncio.gather(
+            extract_rfp_summary_metadata(all_chunks),
+            extract_rfp_overview(all_chunks),
+        )
+        rfp_summary = RfpSummaryOutput.model_validate({
+            **metadata_result,
+            **overview_result,
+        })
+        log.info(
+            "summary_pipeline_done",
+            key_dates=len(rfp_summary.key_dates),
+            has_overview=bool(rfp_summary.rfp_overview.summary),
+        )
+        return rfp_summary
+    except Exception as exc:
+        log.warning("summary_pipeline_error", error=str(exc))
+        return RfpSummaryOutput()

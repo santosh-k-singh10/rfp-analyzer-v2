@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+
+{% block title %}RFP Summary{% if opp_id %} · {{ opp_id }}{% endif %} — RFP Analyzer V2{% endblock %}
+
+{% block rail %}
+<div class="rail-section">
+  <div class="rail-section__label">Navigation</div>
+  <a href="/" class="rail-item">
+    <span class="rail-item__dot" style="background:var(--border)"></span>
+    New Analysis
+  </a>
+  {% if opp_id %}
+  <a href="/?opp_id={{ opp_id }}" class="rail-item">
+    <span class="rail-item__dot" style="background:var(--accent)"></span>
+    Full Analysis →
+  </a>
+  {% elif job_id %}
+  <a href="/review/{{ job_id }}" class="rail-item">
+    <span class="rail-item__dot" style="background:var(--accent)"></span>
+    Full Analysis →
+  </a>
+  {% endif %}
+</div>
+
+<div class="rail-section">
+  <div class="rail-section__label">Summary Sections</div>
+  <a class="rail-item rail-item--active" href="#summary-header" id="rail-header">
+    <span class="rail-item__dot" style="background:var(--color-spine)"></span>
+    Overview Header
+  </a>
+  <a class="rail-item" href="#summary-dates" id="rail-dates">
+    <span class="rail-item__dot" style="background:var(--color-spine)"></span>
+    Key Dates
+  </a>
+  <a class="rail-item" href="#summary-narrative" id="rail-narrative">
+    <span class="rail-item__dot" style="background:var(--color-spine)"></span>
+    Executive Overview
+  </a>
+</div>
+{% endblock %}
+
+{% block content %}
+
+<!-- Loading state -->
+<div id="sum-loading" style="padding:40px 0; text-align:center; color:#8A9491;">
+  <div class="status-badge status-badge--running">Loading summary…</div>
+</div>
+
+<!-- Error state -->
+<div id="sum-error" style="display:none; padding:40px 0; color:#C0392B; text-align:center;"></div>
+
+<!-- Results -->
+<div id="sum-results" style="display:none;">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <div id="summary-header" style="margin-bottom:var(--space-8);">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:var(--space-6);flex-wrap:wrap;">
+      <div>
+        <h1 class="page-title" id="sum-rfp-title" style="margin-bottom:var(--space-2);">RFP Summary</h1>
+        <div id="sum-opp-badge" style="display:none;margin-bottom:var(--space-3);">
+          <span style="
+            display:inline-flex;align-items:center;
+            font-size:0.72rem;font-family:var(--font-mono);font-weight:600;
+            background:#EEF4F0;color:var(--accent);
+            border:1px solid #B8D4C8;border-radius:3px;padding:2px 8px;
+          " id="sum-opp-badge-text"></span>
+        </div>
+      </div>
+      <div id="sum-action-btn" style="flex-shrink:0;"></div>
+    </div>
+
+    <!-- Metadata cards -->
+    <div id="sum-meta-cards" style="
+      display:grid;
+      grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+      gap:var(--space-4);
+      margin-top:var(--space-5);
+    "></div>
+  </div>
+
+  <!-- ── Key Dates ──────────────────────────────────────────────────────── -->
+  <div id="summary-dates" class="panel" style="margin-bottom:var(--space-6);">
+    <div class="panel__title">Key Dates &amp; Milestones</div>
+    <div id="sum-dates-body"></div>
+  </div>
+
+  <!-- ── Executive Overview ─────────────────────────────────────────────── -->
+  <div id="summary-narrative" class="panel" style="margin-bottom:var(--space-6);">
+    <div class="panel__title">Executive Overview</div>
+    <div id="sum-narrative-body"></div>
+  </div>
+
+</div>
+
+<!-- ── Inline script ────────────────────────────────────────────────────── -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+
+  // Config injected by server
+  var OPP_ID  = {{ opp_id  | tojson }};
+  var JOB_ID  = {{ job_id  | tojson }};
+
+  var POLL_MS = 2000;
+  var _pollTimer = null;
+
+  // ── Tiny HTML escaper ───────────────────────────────────────────────────
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Show / hide helpers ─────────────────────────────────────────────────
+  function showLoading()  { document.getElementById('sum-loading').style.display=''; document.getElementById('sum-results').style.display='none'; document.getElementById('sum-error').style.display='none'; }
+  function showResults()  { document.getElementById('sum-loading').style.display='none'; document.getElementById('sum-results').style.display=''; document.getElementById('sum-error').style.display='none'; }
+  function showError(msg) { document.getElementById('sum-loading').style.display='none'; document.getElementById('sum-results').style.display='none'; var el=document.getElementById('sum-error'); el.style.display=''; el.textContent='Error: '+msg; }
+
+  // ── Confidence pill ─────────────────────────────────────────────────────
+  function confPill(level) {
+    var map = { high: ['#EDFBF3','#1A7040','#74C996'], medium: ['#FFF8EC','#8B5200','#E8C96A'], low: ['#FDECEA','#C0392B','#F5A9A9'] };
+    var c = map[level] || map['medium'];
+    return '<span style="display:inline-flex;align-items:center;font-size:0.68rem;font-weight:600;border-radius:3px;padding:1px 6px;background:'+c[0]+';color:'+c[1]+';border:1px solid '+c[2]+';">'+esc(level)+'</span>';
+  }
+
+  // ── Meta card ───────────────────────────────────────────────────────────
+  function metaCard(label, value) {
+    if (!value) return '';
+    return '<div class="panel" style="padding:var(--space-4);margin:0;">' +
+      '<div style="font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:4px;">'+esc(label)+'</div>' +
+      '<div style="font-size:0.9rem;font-weight:500;color:var(--ink);">'+esc(value)+'</div>' +
+      '</div>';
+  }
+
+  // ── Render summary data ─────────────────────────────────────────────────
+  function render(summary, oppId, jobId) {
+    var meta = summary.rfp_metadata || {};
+    var dates = summary.key_dates || [];
+    var overview = summary.rfp_overview || {};
+
+    // Title
+    var titleEl = document.getElementById('sum-rfp-title');
+    titleEl.textContent = meta.rfp_title || 'RFP Summary';
+
+    // Opp badge
+    var badgeWrap = document.getElementById('sum-opp-badge');
+    var badgeText = document.getElementById('sum-opp-badge-text');
+    var displayOpp = oppId || (jobId ? 'Job ' + jobId : null);
+    if (displayOpp) {
+      badgeText.textContent = displayOpp;
+      badgeWrap.style.display = '';
+    }
+
+    // Action button
+    var actionBtn = document.getElementById('sum-action-btn');
+    if (oppId) {
+      actionBtn.innerHTML = '<a href="/?opp_id='+esc(oppId)+'" class="btn btn--primary">Open Full RFP Analyzer →</a>';
+    } else if (jobId) {
+      actionBtn.innerHTML = '<a href="/review/'+esc(jobId)+'" class="btn btn--primary">Open Full RFP Analyzer →</a>';
+    }
+
+    // Meta cards
+    var cards = document.getElementById('sum-meta-cards');
+    cards.innerHTML =
+      metaCard('Client', meta.client_name) +
+      metaCard('Reference', meta.rfp_reference_number) +
+      metaCard('Issuing Dept.', meta.issuing_department) +
+      metaCard('Est. Value', meta.estimated_contract_value) +
+      metaCard('Duration', meta.contract_duration);
+
+    // Key dates table
+    var datesBody = document.getElementById('sum-dates-body');
+    if (!dates.length) {
+      datesBody.innerHTML = '<div class="empty">No key dates extracted.</div>';
+    } else {
+      var rows = dates.map(function(d) {
+        return '<tr>' +
+          '<td style="padding:8px 10px;font-family:var(--font-mono);font-size:0.78rem;color:#6B7C75;white-space:nowrap;">'+esc(d.date_id||'—')+'</td>' +
+          '<td style="padding:8px 10px;font-weight:500;font-size:0.875rem;">'+esc(d.label||'—')+'</td>' +
+          '<td style="padding:8px 10px;font-size:0.875rem;white-space:nowrap;">'+esc(d.display_date||'—')+'</td>' +
+          '<td style="padding:8px 10px;font-family:var(--font-mono);font-size:0.78rem;color:#6B7C75;white-space:nowrap;">'+esc(d.date_value||'—')+'</td>' +
+          '<td style="padding:8px 10px;font-size:0.8rem;color:#4A5A54;font-style:italic;max-width:260px;">'+esc(d.raw_excerpt||'')+'</td>' +
+          '<td style="padding:8px 10px;">'+confPill(d.confidence||'medium')+'</td>' +
+          '</tr>';
+      }).join('');
+      datesBody.innerHTML =
+        '<div style="overflow-x:auto;">' +
+        '<table style="width:100%;border-collapse:collapse;">' +
+        '<thead><tr>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">ID</th>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Milestone</th>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Display Date</th>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">ISO Value</th>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Excerpt</th>' +
+          '<th style="padding:6px 10px;text-align:left;font-size:0.7rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid var(--border);">Confidence</th>' +
+        '</tr></thead>' +
+        '<tbody>' + rows + '</tbody>' +
+        '</table></div>';
+    }
+
+    // Narrative overview
+    var narBody = document.getElementById('sum-narrative-body');
+    var narHtml = '';
+    if (overview.summary) {
+      narHtml += '<p style="font-size:0.9rem;line-height:1.7;color:var(--ink);margin-bottom:var(--space-5);">'+esc(overview.summary)+'</p>';
+    }
+    if (overview.scope_highlights && overview.scope_highlights.length) {
+      narHtml += '<div style="font-size:0.75rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--space-2);">Scope Highlights</div>';
+      narHtml += '<ul style="list-style:none;padding:0;margin:0 0 var(--space-5) 0;">';
+      overview.scope_highlights.forEach(function(h) {
+        narHtml += '<li style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-size:0.875rem;">' +
+          '<span style="color:var(--accent);flex-shrink:0;margin-top:2px;">&#x25AA;</span>' +
+          '<span>'+esc(h)+'</span></li>';
+      });
+      narHtml += '</ul>';
+    }
+    if (overview.client_context) {
+      narHtml += '<div style="font-size:0.75rem;font-weight:600;color:#8A9491;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:var(--space-2);">Client Context</div>';
+      narHtml += '<p style="font-size:0.875rem;color:#4A5A54;line-height:1.6;font-style:italic;">'+esc(overview.client_context)+'</p>';
+    }
+    if (!narHtml) narHtml = '<div class="empty">No narrative overview available.</div>';
+    narBody.innerHTML = narHtml;
+
+    showResults();
+  }
+
+  // ── Fetch & poll logic ──────────────────────────────────────────────────
+  function fetchAndRender() {
+    var url = OPP_ID
+      ? '/summary/opportunity/' + encodeURIComponent(OPP_ID)
+      : '/jobs/' + encodeURIComponent(JOB_ID) + '/summary';
+
+    fetch(url)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === 'complete' && data.rfp_summary) {
+          if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+          render(data.rfp_summary, data.opp_id || OPP_ID, data.job_id || JOB_ID);
+        } else if (data.status === 'failed') {
+          if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+          showError(data.error || 'Analysis failed');
+        }
+        // else still running — keep polling
+      })
+      .catch(function(err) {
+        if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+        showError(err.message || 'Request failed');
+      });
+  }
+
+  // ── Boot ────────────────────────────────────────────────────────────────
+  showLoading();
+  fetchAndRender();
+  _pollTimer = setInterval(fetchAndRender, POLL_MS);
+
+})();
+</script>
+{% endblock %}

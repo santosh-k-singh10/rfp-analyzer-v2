@@ -72,6 +72,17 @@ async def _run_pipeline(
         )
         log.info("output_json_written", job_id=job_id, path=str(job_output_dir / "result.json"))
 
+        # Write summary.json (non-fatal — populated by summary_node)
+        try:
+            summary_data = result_dict.get("rfp_summary")
+            if summary_data:
+                (job_output_dir / "summary.json").write_text(
+                    json.dumps(summary_data, indent=2), encoding="utf-8"
+                )
+                log.info("output_summary_written", job_id=job_id, path=str(job_output_dir / "summary.json"))
+        except Exception as sum_exc:
+            log.warning("output_summary_write_failed", job_id=job_id, error=str(sum_exc))
+
         # Write Markdown (non-fatal)
         try:
             from app.markdown_renderer import render_markdown

@@ -124,26 +124,6 @@ class SpineOutput(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Synthesized output (final result)
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class SynthesizedOutput(BaseModel):
-    """Final assembled output from the synthesizer.
-
-    skill_outputs: one SkillOutput per fired skill (post-dedup)
-    spine: the four spine agent outputs (post-dedup within each category)
-    fired_skills: which skill slugs fired (mirrors ClassifierOutput.fired_skills)
-    metadata: run metadata (job_id, duration, file_name, etc.)
-    """
-
-    skill_outputs: list[SkillOutput] = Field(default_factory=list)
-    spine: SpineOutput = Field(default_factory=SpineOutput)
-    fired_skills: list[str] = Field(default_factory=list)
-    metadata: dict[str, Any] = Field(default_factory=dict)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # RFx Summary output (produced by the standalone RFx Summary agent)
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -207,6 +187,28 @@ class RfpSummaryOutput(BaseModel):
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Synthesized output (final result)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class SynthesizedOutput(BaseModel):
+    """Final assembled output from the synthesizer.
+
+    skill_outputs: one SkillOutput per fired skill (post-dedup)
+    spine: the four spine agent outputs (post-dedup within each category)
+    fired_skills: which skill slugs fired (mirrors ClassifierOutput.fired_skills)
+    metadata: run metadata (job_id, duration, file_name, etc.)
+    rfp_summary: output of the RFx Summary agent (metadata, key dates, overview)
+    """
+
+    skill_outputs: list[SkillOutput] = Field(default_factory=list)
+    spine: SpineOutput = Field(default_factory=SpineOutput)
+    fired_skills: list[str] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+    rfp_summary: RfpSummaryOutput = Field(default_factory=RfpSummaryOutput)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # LangGraph pipeline state
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -255,6 +257,9 @@ class PipelineState(TypedDict, total=False):
 
     # Final synthesized result
     synthesized_output: SynthesizedOutput
+
+    # RFx Summary extraction result (populated by summary_node)
+    rfp_summary: Optional[RfpSummaryOutput]
 
     # Run metadata and errors
     metadata: dict[str, Any]
