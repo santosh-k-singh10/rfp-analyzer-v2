@@ -423,7 +423,7 @@ class TestPostSummaryOpportunityEndpoint:
         opp_files = _make_opp_files("OPP-JSON-1", opp_dir, [("rfp.pdf", "primary")])
 
         with (
-            patch("app.routers.summary._run_summary_pipeline_job", side_effect=_noop_summary_pipeline),
+            patch("pipeline.summary_extractor.run_summary_pipeline", new=AsyncMock(return_value=_sample_summary_output())),
             patch("core.opportunity_resolver.resolve_opportunity_files", return_value=opp_files),
             patch("app.routers.summary.get_job_store", return_value=store),
             patch("app.routers.summary.get_upload_dir", return_value=upload_dir),
@@ -434,8 +434,10 @@ class TestPostSummaryOpportunityEndpoint:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert data["opp_id"] == "OPP-JSON-1"
-        assert "job_id" in data
+        assert "rfp_metadata" in data
+        assert "key_dates" in data
+        assert "rfp_overview" in data
+        assert data["rfp_metadata"]["client_name"] == "Test Enterprise Corp"
 
     def test_post_summary_with_file_upload(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -444,7 +446,7 @@ class TestPostSummaryOpportunityEndpoint:
         pdf_bytes = b"%PDF-1.4 dummy content"
 
         with (
-            patch("app.routers.summary._run_summary_pipeline_job", side_effect=_noop_summary_pipeline),
+            patch("pipeline.summary_extractor.run_summary_pipeline", new=AsyncMock(return_value=_sample_summary_output())),
             patch("app.routers.summary.get_job_store", return_value=store),
             patch("app.routers.summary.get_upload_dir", return_value=upload_dir),
             patch("app.config.get_output_dir", return_value=output_dir),
@@ -458,8 +460,10 @@ class TestPostSummaryOpportunityEndpoint:
 
         assert resp.status_code == 200
         data = resp.json()
-        assert "job_id" in data
-        assert data["status"] in ("pending", "running", "complete")
+        assert "rfp_metadata" in data
+        assert "key_dates" in data
+        assert "rfp_overview" in data
+        assert data["rfp_metadata"]["client_name"] == "Test Enterprise Corp"
 
 
 # ---------------------------------------------------------------------------

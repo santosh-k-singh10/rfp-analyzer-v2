@@ -149,13 +149,13 @@ class TestExtractMetadata:
         assert result["key_dates"][0]["label"] == "Submission Deadline"
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_no_chunks(self):
+    async def test_raises_on_no_chunks(self):
         from pipeline.summary_extractor import extract_rfp_summary_metadata
-        result = await extract_rfp_summary_metadata([])
-        assert result == {"rfp_metadata": {}, "key_dates": []}
+        with pytest.raises(ValueError):
+            await extract_rfp_summary_metadata([])
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_llm_error(self):
+    async def test_raises_on_llm_error(self):
         chunks = [_make_chunk()]
         with patch(
             "pipeline.summary_extractor.call_llm_async",
@@ -163,9 +163,8 @@ class TestExtractMetadata:
             side_effect=RuntimeError("LLM down"),
         ):
             from pipeline.summary_extractor import extract_rfp_summary_metadata
-            result = await extract_rfp_summary_metadata(chunks)
-
-        assert result == {"rfp_metadata": {}, "key_dates": []}
+            with pytest.raises(RuntimeError, match="Metadata LLM extraction failed"):
+                await extract_rfp_summary_metadata(chunks)
 
     @pytest.mark.asyncio
     async def test_deduplicates_key_dates(self):
@@ -213,7 +212,7 @@ class TestExtractOverview:
         assert "Acme Corp" in result["rfp_overview"]["summary"]
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_llm_error(self):
+    async def test_raises_on_llm_error(self):
         chunks = [_make_chunk()]
         with patch(
             "pipeline.summary_extractor.call_llm_async",
@@ -221,9 +220,8 @@ class TestExtractOverview:
             side_effect=RuntimeError("LLM unavailable"),
         ):
             from pipeline.summary_extractor import extract_rfp_overview
-            result = await extract_rfp_overview(chunks)
-
-        assert result == {"rfp_overview": {}}
+            with pytest.raises(RuntimeError, match="Overview LLM extraction failed"):
+                await extract_rfp_overview(chunks)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -258,15 +256,13 @@ class TestRunSummaryPipeline:
         assert "Acme Corp" in result.rfp_overview.summary
 
     @pytest.mark.asyncio
-    async def test_returns_empty_on_missing_file(self):
+    async def test_raises_on_missing_file(self):
         from pipeline.summary_extractor import run_summary_pipeline
-        result = await run_summary_pipeline(
-            file_paths=["/nonexistent/path/rfp.pdf"],
-            primary_file_path="/nonexistent/path/rfp.pdf",
-        )
-        assert isinstance(result, RfpSummaryOutput)
-        # Should return empty defaults rather than raising
-        assert result.key_dates == []
+        with pytest.raises(ValueError, match="No readable content"):
+            await run_summary_pipeline(
+                file_paths=["/nonexistent/path/rfp.pdf"],
+                primary_file_path="/nonexistent/path/rfp.pdf",
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────────────

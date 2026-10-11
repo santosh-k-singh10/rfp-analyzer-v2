@@ -126,7 +126,7 @@ async def extract_rfp_summary_metadata(chunks: list[DocumentChunk]) -> dict[str,
     relevant = [c for c in chunks if c.document_role != "qna" and c.is_substantial()]
     if not relevant:
         log.warning("summary_metadata_no_chunks")
-        return {"rfp_metadata": {}, "key_dates": []}
+        raise ValueError("No substantial content found in document chunks for metadata extraction.")
 
     batches = pack_chunks(relevant)
     # Send only the first batch — metadata/dates are a small single-object
@@ -137,8 +137,8 @@ async def extract_rfp_summary_metadata(chunks: list[DocumentChunk]) -> dict[str,
     try:
         raw_results = await call_llm_async(_METADATA_SYSTEM_PROMPT, user_content)
     except Exception as exc:
-        log.warning("summary_metadata_llm_error", error=str(exc)[:200])
-        return {"rfp_metadata": {}, "key_dates": []}
+        log.error("summary_metadata_llm_error", error=str(exc))
+        raise RuntimeError(f"Metadata LLM extraction failed: {exc}") from exc
 
     # call_llm_async returns list[dict]. For a single-object response the LLM
     # may return either [{"rfp_metadata": ..., "key_dates": ...}] or just the
@@ -211,7 +211,7 @@ async def extract_rfp_overview(chunks: list[DocumentChunk]) -> dict[str, Any]:
         primary = [c for c in chunks if c.is_substantial()]
     if not primary:
         log.warning("summary_overview_no_chunks")
-        return {"rfp_overview": {}}
+        raise ValueError("No substantial content found in document chunks for narrative overview extraction.")
 
     batches = pack_chunks(primary)
     batch = batches[0] if batches else primary[:10]
@@ -220,8 +220,8 @@ async def extract_rfp_overview(chunks: list[DocumentChunk]) -> dict[str, Any]:
     try:
         raw_results = await call_llm_async(_OVERVIEW_SYSTEM_PROMPT, user_content)
     except Exception as exc:
-        log.warning("summary_overview_llm_error", error=str(exc)[:200])
-        return {"rfp_overview": {}}
+        log.error("summary_overview_llm_error", error=str(exc))
+        raise RuntimeError(f"Overview LLM extraction failed: {exc}") from exc
 
     result_obj: dict[str, Any] = {}
     if raw_results:
@@ -285,25 +285,21 @@ async def run_summary_pipeline(
             log.warning("summary_pipeline_ingest_error", file=fname, error=str(exc))
 
     if not all_chunks:
-        log.warning("summary_pipeline_no_chunks")
-        return RfpSummaryOutput()
+        log.error("summary_pipeline_no_chunks", files=file_paths)
+        raise ValueError(f"No readable content extracted from documents: {file_paths}")
 
     # ── Run metadata and overview extractions concurrently ───────────────────
-    try:
-        metadata_result, overview_result = await asyncio.gather(
-            extract_rfp_summary_metadata(all_chunks),
-            extract_rfp_overview(all_chunks),
-        )
-        rfp_summary = RfpSummaryOutput.model_validate({
-            **metadata_result,
-            **overview_result,
-        })
-        log.info(
-            "summary_pipeline_done",
-            key_dates=len(rfp_summary.key_dates),
-            has_overview=bool(rfp_summary.rfp_overview.summary),
-        )
-        return rfp_summary
-    except Exception as exc:
-        log.warning("summary_pipeline_error", error=str(exc))
-        return RfpSummaryOutput()
+    metadata_result, overview_result = await asyncio.gather(
+        extract_rfp_summary_metadata(all_chunks),
+        extract_rfp_overview(all_chunks),
+    )
+    rfp_summary = RfpSummaryOutput.model_validate({
+        **metadata_result,
+        **overview_result,
+    })
+    log.info(
+        "summary_pipeline_done",
+        key_dates=len(rfp_summary.key_dates),
+        has_overview=bool(rfp_summary.rfp_overview.summary),
+    )
+    return rfp_summary

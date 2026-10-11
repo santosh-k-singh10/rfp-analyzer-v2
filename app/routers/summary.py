@@ -291,19 +291,80 @@ async def analyze_summary(
     if "force" in request.query_params:
         force = request.query_params.get("force", "").lower() in ("true", "1", "yes")
 
+    from pipeline.summary_extractor import run_summary_pipeline
+
     # Path A: opp_id provided without direct file uploads
     if opp_id and not files:
-        job = await start_summary_analysis(
+        from core.opportunity_resolver import resolve_opportunity_files
+        try:
+            opp_files = resolve_opportunity_files(opp_id)
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=f"Failed to extract summary: {exc}") from exc
+
+        if not opp_files.file_paths:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Failed to extract summary: No supported documents found for opportunity '{opp_id}'.",
+            )
+
+        upload_base = get_upload_dir()
+        upload_base.mkdir(parents=True, exist_ok=True)
+        job_id = str(uuid.uuid4())
+        job_folder = upload_base / job_id
+        job_folder.mkdir(parents=True, exist_ok=True)
+
+        saved_paths: list[str] = []
+        saved_names: list[str] = []
+        final_roles: dict[str, str] = {}
+
+        for src in opp_files.file_paths:
+            dest = job_folder / src.name
+            shutil.copy2(src, dest)
+            saved_paths.append(str(dest))
+            saved_names.append(src.name)
+            final_roles[src.name] = opp_files.file_roles.get(src.name, "primary")
+
+        primary_src = opp_files.primary_file_path
+        primary_name = primary_src.name if primary_src else saved_names[0]
+        primary_path = str(job_folder / primary_name)
+        final_roles[primary_name] = "primary"
+
+        store = get_job_store()
+        job = store.create_job(
+            file_name=primary_name,
+            file_path=primary_path,
+            file_names=saved_names,
+            file_paths=saved_paths,
+            file_roles=final_roles,
+            primary_file_name=primary_name,
+            primary_file_path=primary_path,
             opp_id=opp_id,
-            background_tasks=background_tasks,
-            force=force,
         )
-        status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
-        return {
-            "job_id": job.job_id,
-            "status": status_str,
-            "opp_id": opp_id,
-        }
+
+        try:
+            store.set_running(job.job_id)
+            summary_output = await run_summary_pipeline(
+                file_paths=saved_paths,
+                primary_file_path=primary_path,
+                file_roles=final_roles,
+            )
+            summary_dict = summary_output.model_dump()
+
+            job_output_dir = get_output_dir() / job.job_id
+            job_output_dir.mkdir(parents=True, exist_ok=True)
+            (job_output_dir / "summary.json").write_text(
+                json.dumps(summary_dict, indent=2), encoding="utf-8"
+            )
+            job.output_dir = str(job_output_dir)
+            store.set_complete(job.job_id, {"rfp_summary": summary_dict})
+            return summary_dict
+        except Exception as exc:
+            log.error("summary_extraction_failed", job_id=job.job_id, error=str(exc))
+            store.set_failed(job.job_id, str(exc))
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to extract summary: {exc}",
+            )
 
     # Path B: direct file uploads
     if files:
@@ -358,20 +419,30 @@ async def analyze_summary(
             opp_id=opp_id,
         )
 
-        background_tasks.add_task(
-            _run_summary_pipeline_job,
-            job.job_id,
-            saved_paths,
-            primary_path,
-            final_roles,
-        )
+        try:
+            store.set_running(job.job_id)
+            summary_output = await run_summary_pipeline(
+                file_paths=saved_paths,
+                primary_file_path=primary_path,
+                file_roles=final_roles,
+            )
+            summary_dict = summary_output.model_dump()
 
-        status_str = job.status.value if hasattr(job.status, "value") else str(job.status)
-        return {
-            "job_id": job.job_id,
-            "status": status_str,
-            "opp_id": opp_id,
-        }
+            job_output_dir = get_output_dir() / job.job_id
+            job_output_dir.mkdir(parents=True, exist_ok=True)
+            (job_output_dir / "summary.json").write_text(
+                json.dumps(summary_dict, indent=2), encoding="utf-8"
+            )
+            job.output_dir = str(job_output_dir)
+            store.set_complete(job.job_id, {"rfp_summary": summary_dict})
+            return summary_dict
+        except Exception as exc:
+            log.error("summary_extraction_failed", job_id=job.job_id, error=str(exc))
+            store.set_failed(job.job_id, str(exc))
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to extract summary: {exc}",
+            )
 
     raise HTTPException(status_code=400, detail="Either 'opp_id' or 'files' must be provided.")
 
